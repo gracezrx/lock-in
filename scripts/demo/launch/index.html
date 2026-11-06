@@ -1,0 +1,183 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <title>Lock In launch film</title>
+    <!-- The 60-second launch film (1920x1080). Every frame is drawn from a time t by render(t),
+         so record.mjs can capture it exactly. The bomb scenes play the bomb clip (../bomb) inside
+         this page; the app's screens are the app's own UI (screenshots in ui/, and its card CSS). -->
+    <link rel="stylesheet" href="/dist/renderer/base.css" />
+    <style>
+      *, *::before, *::after { animation: none !important; transition: none !important; box-sizing: border-box; }
+      html, body { width: 1920px; height: 1080px; margin: 0; overflow: hidden; }
+      body { position: relative; background: radial-gradient(120% 90% at 50% 40%, #22303c 0%, #101820 70%); font-family: var(--body); color: #fff; }
+      iframe { position: absolute; left: 0; top: 0; border: 0; background: transparent; }
+      .layer { position: absolute; inset: 0; visibility: hidden; }
+      #bomb { width: 1920px; height: 1080px; }
+
+      /* Sam's screen, up close */
+      #close { background: radial-gradient(120% 90% at 50% 40%, #22303c 0%, #101820 70%); }
+      #bezel { position: absolute; left: 229px; top: 136px; width: 1462px; height: 924px; border-radius: 26px; background: #0b0f13; box-shadow: 0 0 0 2px #2c353d, 0 40px 90px rgba(0, 0, 0, 0.55); }
+      #screen { position: absolute; left: 243px; top: 150px; width: 1280px; height: 800px; overflow: hidden; border-radius: 10px; background: #000; transform: scale(1.12); transform-origin: 0 0; }
+      #mac { width: 1280px; height: 800px; }
+      #coach { width: 1280px; height: 800px; visibility: hidden; }
+      #toast { position: absolute; left: 872px; top: 34px; width: 400px; height: 190px; opacity: 0; }
+      #glow { position: absolute; width: 10px; height: 10px; border-radius: 999px; border: 4px solid var(--yellow); box-shadow: 0 0 18px 4px rgba(255, 207, 0, 0.75); opacity: 0; }
+      #drift { position: absolute; padding: 6px 12px 7px; border-radius: 10px; background: var(--red); color: #fff; font-weight: 800; font-size: 14px; white-space: nowrap; opacity: 0; box-shadow: 0 8px 20px rgba(0, 0, 0, 0.3); }
+      #talk { position: absolute; left: 852px; top: 40px; width: 410px; height: 74px; display: flex; align-items: center; gap: 14px; padding: 0 20px; border-radius: 16px; background: #101820; color: #fff; box-shadow: 0 18px 40px rgba(0, 0, 0, 0.4), inset 0 0 0 1px rgba(255, 255, 255, 0.08); opacity: 0; }
+      #talk .lk { width: 38px; height: 38px; border-radius: 10px; display: grid; place-items: center; background: var(--yellow); color: var(--ink); flex: none; }
+      #talk .who { flex: none; font-family: var(--display); font-weight: 800; font-size: 24px; line-height: 1; text-transform: uppercase; letter-spacing: 0.02em; white-space: nowrap; }
+      #talk .who small { display: block; margin-top: 4px; font-family: var(--body); font-weight: 600; font-size: 13px; letter-spacing: 0; text-transform: none; color: rgba(255, 255, 255, 0.6); }
+      #bars { margin-left: auto; display: flex; align-items: center; gap: 4px; height: 40px; }
+      #bars i, #bars2 i { width: 5px; height: 6px; border-radius: 3px; background: var(--yellow); }
+      #cursor { position: absolute; left: 0; top: 0; width: 26px; height: 36px; opacity: 0; filter: drop-shadow(0 2px 3px rgba(0, 0, 0, 0.4)); }
+      #blocked { position: absolute; display: none; place-items: center; background: #101820; }
+      #blocked .bc { width: 560px; padding: 40px 46px; border-radius: 18px; background: #e5202e; color: #fff; box-shadow: 0 30px 70px rgba(0, 0, 0, 0.45); font-family: -apple-system, BlinkMacSystemFont, 'Public Sans', sans-serif; }
+      #blocked .mk { font-weight: 700; font-size: 15px; opacity: 0.85; margin-bottom: 14px; }
+      #blocked h1 { font-size: 70px; line-height: 0.95; margin: 0 0 14px; font-weight: 900; letter-spacing: -0.01em; }
+      #blocked p { margin: 0; font-size: 18px; line-height: 1.45; opacity: 0.94; }
+      #poof { position: absolute; display: none; padding: 16px 22px; border-radius: 14px; background: #fff; color: var(--ink); font-weight: 700; font-size: 17px; box-shadow: 0 18px 40px rgba(0, 0, 0, 0.35); }
+
+      /* The recap: nudge, talk, yell */
+      #recap { display: flex; justify-content: center; align-items: center; gap: 46px; padding-bottom: 60px; }
+      .tile { width: 520px; height: 460px; border-radius: 26px; background: rgba(255, 255, 255, 0.06); box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.1); display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 34px; opacity: 0; }
+      .tile b { font-family: var(--display); font-weight: 900; font-size: 92px; line-height: 0.9; text-transform: uppercase; }
+      .tile b y { color: var(--yellow); }
+      .tile .n { font-family: var(--display); font-weight: 800; font-size: 28px; letter-spacing: 0.1em; color: rgba(255, 255, 255, 0.55); text-transform: uppercase; }
+      .tile img { width: 420px; border-radius: 12px; box-shadow: 0 18px 40px rgba(0, 0, 0, 0.35); }
+      .tile .mini-talk { position: static; opacity: 1; width: 380px; transform: none; }
+      .tile .mini-card { width: 420px; padding: 26px 30px 24px; border-radius: 14px; background: var(--yellow); color: var(--ink); transform: rotate(-2.5deg); box-shadow: 0 18px 40px rgba(0, 0, 0, 0.35); font-family: var(--display); font-weight: 900; font-size: 44px; line-height: 0.95; }
+
+      /* Features */
+      .feat { position: absolute; inset: 0; visibility: hidden; }
+      .feat img { position: absolute; border-radius: 18px; box-shadow: 0 30px 80px rgba(0, 0, 0, 0.5); }
+      .feat .note { position: absolute; font-size: 34px; line-height: 1.3; font-weight: 600; color: rgba(255, 255, 255, 0.78); }
+      .feat .note b { color: #fff; }
+
+      /* End card */
+      #end { background: var(--ink); display: flex; align-items: center; gap: 80px; padding: 0 170px 30px; }
+      #end .l { flex: 1; }
+      #end img.icon { width: 132px; height: 132px; margin-bottom: 34px; }
+      #end h1 { margin: 0; font-family: var(--display); font-weight: 900; font-size: 210px; line-height: 0.84; text-transform: uppercase; letter-spacing: -0.01em; }
+      #end .tag { margin-top: 26px; font-size: 40px; line-height: 1.25; font-weight: 600; color: rgba(255, 255, 255, 0.76); }
+      #end .meta { margin-top: 40px; display: flex; gap: 14px; flex-wrap: wrap; }
+      #end .meta span { padding: 12px 22px 13px; border-radius: 999px; background: rgba(255, 255, 255, 0.1); font-family: var(--display); font-weight: 800; font-size: 32px; letter-spacing: 0.04em; text-transform: uppercase; }
+      #end .meta span.y { background: var(--yellow); color: var(--ink); }
+      #end .r { width: 560px; text-align: center; }
+      #end .go { font-family: var(--display); font-weight: 900; font-size: 120px; line-height: 0.9; text-transform: uppercase; }
+      #end .go y { color: var(--yellow); }
+      #endBomb { width: 230px; height: 230px; margin-bottom: 20px; }
+
+      /* Stinger */
+      #kaboom { position: absolute; left: 960px; top: 540px; width: 1500px; height: 1100px; margin: -550px 0 0 -750px; visibility: hidden; }
+      #outro { background: #000; display: grid; place-items: center; text-align: center; }
+      #outro p { font-family: var(--display); font-weight: 900; font-size: 64px; text-transform: uppercase; letter-spacing: 0.02em; }
+      #outro small { display: block; margin-top: 18px; font-family: var(--body); font-weight: 600; font-size: 30px; letter-spacing: 0; text-transform: none; color: rgba(255, 255, 255, 0.7); }
+
+      /* Words on top */
+      .shade { position: absolute; inset: 0 0 auto 0; height: 250px; background: linear-gradient(rgba(16, 24, 32, 0.92) 0%, rgba(16, 24, 32, 0.55) 60%, rgba(16, 24, 32, 0) 100%); opacity: 0; }
+      #cap { position: absolute; left: 60px; right: 60px; top: 34px; text-align: center; color: #fff; font-family: var(--display); font-weight: 900; font-size: 104px; line-height: 1; letter-spacing: -0.005em; text-transform: uppercase; white-space: nowrap; text-shadow: 0 4px 0 rgba(0, 0, 0, 0.35); opacity: 0; transform-origin: 50% 50%; }
+      #cap y, #sub y { color: var(--yellow); }
+      #sub { position: absolute; left: 50%; bottom: 38px; max-width: 1500px; padding: 14px 30px 16px; border-radius: 18px; background: rgba(8, 12, 16, 0.82); color: #fff; font-weight: 700; font-size: 40px; line-height: 1.25; text-align: center; transform: translateX(-50%); opacity: 0; box-shadow: 0 10px 30px rgba(0, 0, 0, 0.3); }
+      #sub .who { display: inline-block; margin-right: 12px; padding: 3px 12px 5px; border-radius: 8px; font-family: var(--display); font-weight: 900; font-size: 32px; letter-spacing: 0.04em; vertical-align: 3px; }
+      #sub .who.coach { background: var(--yellow); color: var(--ink); }
+      #sub .who.sam { background: #4f7fe0; color: #fff; }
+      #flash { position: absolute; inset: 0; background: #fff; opacity: 0; }
+      #fade { position: absolute; inset: 0; background: #000; opacity: 1; }
+    </style>
+  </head>
+  <body>
+    <!-- 1. The bomb clip's world: Sam's Mac, his head, your phone -->
+    <div class="layer" id="wide"><iframe id="bomb" src="/scene/index.html?wide=1" title="The bomb clip"></iframe></div>
+
+    <!-- 2. Sam's screen up close -->
+    <div class="layer" id="close">
+      <div id="bezel"></div>
+      <div id="screen">
+        <iframe id="mac" src="/scene/mac.html" title="Sam's Mac"></iframe>
+        <div id="blocked"><div class="bc"><div class="mk" id="bMark">Lock In bomb from Grace</div><h1>Locked.</h1><p id="bMsg"></p></div></div>
+        <div id="poof"></div>
+        <iframe id="toast" src="toast.html" title="Corner card"></iframe>
+        <div id="glow"></div>
+        <div id="drift">Drifting · 22 min</div>
+        <div id="talk">
+          <span class="lk"><svg width="20" height="20" viewBox="0 0 24 24"><path d="M7 11V8a5 5 0 0 1 10 0v3" fill="none" stroke="currentColor" stroke-width="2.6"/><rect x="4.5" y="11" width="15" height="10" rx="2.5" fill="currentColor"/></svg></span>
+          <span class="who">Lock In<small>is talking to you</small></span>
+          <span id="bars"></span>
+        </div>
+        <iframe id="coach" src="coachcard.html" title="The coach's card"></iframe>
+        <svg id="cursor" viewBox="0 0 22 30" aria-hidden="true"><path d="M2 2v22l6-6 4 9 4-2-4-9h8z" fill="#fff" stroke="#101820" stroke-width="1.6" stroke-linejoin="round" /></svg>
+      </div>
+    </div>
+
+    <!-- 3. Nudge, talk, yell -->
+    <div class="layer" id="recap">
+      <div class="tile" id="t1"><span class="n">First</span><iframe src="toast.html" title="" style="position:static;width:400px;height:170px;transform:scale(1.1)"></iframe><b>It <y>nudges</y></b></div>
+      <div class="tile" id="t2"><span class="n">Then</span>
+        <div id="talk2" class="mini-talk" style="width:420px;display:flex;align-items:center;gap:14px;padding:0 20px;height:74px;border-radius:16px;background:#101820;box-shadow:0 18px 40px rgba(0,0,0,.4),inset 0 0 0 1px rgba(255,255,255,.12)">
+          <span style="width:38px;height:38px;border-radius:10px;display:grid;place-items:center;background:var(--yellow);color:var(--ink)"><svg width="20" height="20" viewBox="0 0 24 24"><path d="M7 11V8a5 5 0 0 1 10 0v3" fill="none" stroke="currentColor" stroke-width="2.6"/><rect x="4.5" y="11" width="15" height="10" rx="2.5" fill="currentColor"/></svg></span>
+          <span style="flex:none;white-space:nowrap;font-family:var(--display);font-weight:800;font-size:24px;text-transform:uppercase">Lock In<small style="display:block;margin-top:4px;font-family:var(--body);font-weight:600;font-size:13px;text-transform:none;color:rgba(255,255,255,.6)">is talking to you</small></span>
+          <span id="bars2" style="margin-left:auto;display:flex;align-items:center;gap:4px;height:40px"></span>
+        </div>
+        <b>It <y>talks</y></b></div>
+      <div class="tile" id="t3"><span class="n">Then</span><div class="mini-card">This is an intervention.</div><b>It <y>yells</y></b></div>
+    </div>
+
+    <!-- 4. What else it does: the app's own screens -->
+    <div class="layer" id="feats">
+      <div class="feat" id="f1">
+        <img src="ui/panel-idle.png" alt="" style="left: 300px; top: 158px; width: 440px;" />
+        <div class="note" style="left: 840px; top: 400px; width: 800px;"><b>Your big goals and today’s to-dos</b>, one click from the menu bar. It cheers when you tick one off, and has words when hours go by without one.</div>
+      </div>
+      <div class="feat" id="f2">
+        <img src="ui/toast-meeting.png" alt="" style="left: 240px; top: 380px; width: 800px;" />
+        <div class="note" style="left: 1130px; top: 420px; width: 600px;"><b>Reads your calendar.</b> Quiet in meetings, a heads-up before them, never a roast on a Zoom.</div>
+      </div>
+      <div class="feat" id="f3">
+        <img src="ui/setup-connect.png" alt="" style="left: 210px; top: 190px; width: 1000px;" />
+        <div class="note" style="left: 1290px; top: 400px; width: 470px;"><b>Three questions, four clicks.</b> Goals, to-dos, distractions, then Chrome and your calendar hook up by themselves.</div>
+      </div>
+      <div class="feat" id="f4">
+        <img src="ui/panel-drifting.png" alt="" style="left: 400px; top: 158px; width: 440px;" />
+        <img src="ui/panel-locked.png" alt="" style="left: 1080px; top: 158px; width: 440px;" />
+      </div>
+    </div>
+
+    <!-- 5. The end card -->
+    <div class="layer" id="end">
+      <div class="l">
+        <img class="icon" src="/icon.png" alt="" />
+        <h1>Lock In.</h1>
+        <p class="tag">The focus coach that roasts you back to work.</p>
+        <div class="meta"><span class="y">Free for Mac</span><span>Open source</span><span>gracezrx.com/lock-in</span></div>
+      </div>
+      <div class="r" id="endR">
+        <svg id="endBomb" viewBox="0 0 150 150" aria-hidden="true">
+          <circle cx="66" cy="84" r="54" fill="#101820" stroke="#fff" stroke-width="6" />
+          <rect x="92" y="22" width="26" height="22" rx="4" transform="rotate(38 105 33)" fill="#fff" />
+          <path d="M112 26 C120 14 128 12 133 20" fill="none" stroke="#fff" stroke-width="5" stroke-linecap="round" />
+          <g id="endSpark" transform="translate(133 18)"><path d="M0-15 4-4 15 0 4 4 0 15-4 4-15 0-4-4z" fill="#ffcf00" /><circle r="5" fill="#fff" /></g>
+          <ellipse cx="46" cy="62" rx="12" ry="7" fill="rgba(255,255,255,.35)" transform="rotate(-35 46 62)" />
+        </svg>
+        <div class="go">Go bomb<br />a <y>friend.</y></div>
+      </div>
+    </div>
+
+    <!-- 6. Outro -->
+    <div class="layer" id="outro"><p>He never learns.<small>Lock In · free for Mac · gracezrx.com/lock-in</small></p></div>
+
+
+    <div class="shade" id="shade"></div>
+    <div id="cap"></div>
+    <div id="sub"></div>
+    <div id="flash"></div>
+    <svg id="kaboom" viewBox="-750 -550 1500 1100" aria-hidden="true">
+      <polygon id="kOut" fill="#ffcf00" stroke="#e5202e" stroke-width="26" stroke-linejoin="round" />
+      <polygon id="kIn" fill="#ff7a1a" />
+      <text x="0" y="40" text-anchor="middle" font-family="Big Shoulders Display" font-weight="900" font-size="230" fill="#fff" stroke="#101820" stroke-width="16" paint-order="stroke" transform="rotate(-8)">KABOOM!</text>
+    </svg>
+    <div id="fade"></div>
+
+    <script src="film.js"></script>
+  </body>
+</html>

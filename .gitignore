@@ -4,3 +4,5 @@ release/
 native/mac-helper/build/
 *.log
 .DS_Store
+# The launch film is large: record it with npm run demo:launch
+docs/launch*.mp4

@@ -1,0 +1,60 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <title>Coach card</title>
+    <!-- The real yellow card (the coach yelling): the app's own overlay.css, driven frame by frame
+         by the launch film (window.render(k), k = seconds since it slammed down). -->
+    <link rel="stylesheet" href="/dist/renderer/base.css" />
+    <link rel="stylesheet" href="/dist/renderer/overlay.css" />
+    <style>
+      *, *::before, *::after { animation: none !important; transition: none !important; }
+      html, body { width: 1280px; height: 800px; }
+    </style>
+  </head>
+  <body>
+    <div class="scrim" id="scrim"></div>
+    <section class="card" id="card" data-level="3">
+      <header class="card-head">
+        <span class="card-name">Intervention</span>
+        <span class="card-meta">180 videos today, 0 words written</span>
+      </header>
+      <h1 class="line">This is an intervention. 180 videos. 0 words. I’m not leaving until you start the investor update.</h1>
+      <div class="options" id="options">
+        <button class="opt primary" type="button"><kbd>1</kbd>Lock in on “Investor update”</button>
+        <button class="opt" type="button"><kbd>2</kbd>Talk back</button>
+        <button class="opt" type="button"><kbd>3</kbd>Leave me alone for 30</button>
+      </div>
+    </section>
+    <script>
+      const lerp = (a, b, k) => a + (b - a) * k;
+      const out = (k) => 1 - Math.pow(1 - k, 3);
+      // The card's slam: big and tilted, overshoots, settles with a little shake.
+      const KEYS = [
+        { at: 0, s: 1.4, r: -10, x: 0, o: 0 },
+        { at: 0.45, s: 0.96, r: -1.5, x: 0, o: 1 },
+        { at: 0.6, s: 1, r: -3, x: -10, o: 1 },
+        { at: 0.75, s: 1, r: -2, x: 8, o: 1 },
+        { at: 1, s: 1, r: -2.5, x: 0, o: 1 },
+      ];
+      function slam(k) {
+        let i = 0;
+        while (i < KEYS.length - 2 && k > KEYS[i + 1].at) i++;
+        const a = KEYS[i];
+        const b = KEYS[i + 1];
+        const f = out(Math.min(1, Math.max(0, (k - a.at) / (b.at - a.at))));
+        return { s: lerp(a.s, b.s, f), r: lerp(a.r, b.r, f), x: lerp(a.x, b.x, f), o: lerp(a.o, b.o, f) };
+      }
+      /** k: seconds since the slam (negative: not there yet). dim: 0..1, fades it back (for the recap). */
+      window.render = (k, dim = 0) => {
+        document.body.style.visibility = k < 0 ? 'hidden' : 'visible';
+        if (k < 0) return;
+        const p = slam(Math.min(1, k / 0.55));
+        document.getElementById('scrim').style.opacity = String(Math.min(1, k / 0.12) * (1 - dim * 0.4));
+        const card = document.getElementById('card');
+        card.style.opacity = String(p.o * (1 - dim));
+        card.style.transform = `translateX(${p.x}px) scale(${p.s * (1 - dim * 0.1)}) rotate(${p.r}deg)`;
+      };
+    </script>
+  </body>
+</html>
