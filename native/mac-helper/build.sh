@@ -19,10 +19,12 @@ if ! command -v swiftc >/dev/null 2>&1; then
 fi
 
 mkdir -p build
+# Built for macOS 13 and later, whatever this Mac runs (the downloadable app is built on a newer one).
+TARGET=(-target "$(uname -m)-apple-macos13.0")
 
 if [[ -f build/lockin-helper && build/lockin-helper -nt main.swift ]]; then
   echo "[helper] Window sensor up to date."
-elif swiftc -O -swift-version 5 main.swift -o build/lockin-helper \
+elif swiftc -O -swift-version 5 "${TARGET[@]}" main.swift -o build/lockin-helper \
   -framework Cocoa -framework ApplicationServices -framework CoreAudio; then
   echo "[helper] Built native/mac-helper/build/lockin-helper"
 else
@@ -31,14 +33,14 @@ fi
 
 if [[ -f build/lockin-calendar && build/lockin-calendar -nt calendar.swift ]]; then
   echo "[helper] Calendar reader up to date."
-elif swiftc -O -swift-version 5 calendar.swift -o build/lockin-calendar -framework EventKit; then
+elif swiftc -O -swift-version 5 "${TARGET[@]}" calendar.swift -o build/lockin-calendar -framework EventKit; then
   echo "[helper] Built native/mac-helper/build/lockin-calendar"
 else
   echo "[helper] Couldn't build the calendar reader; calendar links still work."
 fi
 if [[ -f build/lockin-keys && build/lockin-keys -nt keys.swift ]]; then
   echo "[helper] Space-bar watcher up to date."
-elif swiftc -O -swift-version 5 keys.swift -o build/lockin-keys -framework Cocoa -framework ApplicationServices; then
+elif swiftc -O -swift-version 5 "${TARGET[@]}" keys.swift -o build/lockin-keys -framework Cocoa -framework ApplicationServices; then
   echo "[helper] Built native/mac-helper/build/lockin-keys"
 else
   echo "[helper] Couldn't build the space-bar watcher; Command-Shift-Space still opens a conversation."
