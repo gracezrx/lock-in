@@ -1,0 +1,131 @@
+html, body { height: 100%; background: transparent; overflow: hidden; }
+body { display: grid; place-items: center; user-select: none; }
+
+.scrim {
+  position: fixed;
+  inset: 0;
+  background: rgba(16, 24, 32, 0.78);
+  backdrop-filter: blur(6px) saturate(0.6);
+}
+
+/* The referee card: yellow for a call-out, red for the lock. */
+.card {
+  --card: var(--yellow);
+  --card-ink: var(--ink);
+  position: relative;
+  width: min(760px, calc(100vw - 64px));
+  padding: 40px 48px 32px;
+  border-radius: 18px;
+  background: var(--card);
+  color: var(--card-ink);
+  transform: rotate(-2.5deg);
+  box-shadow: 0 2px 0 rgba(0, 0, 0, 0.25), 0 40px 80px rgba(0, 0, 0, 0.45);
+  animation: raise 420ms cubic-bezier(0.2, 0.9, 0.25, 1.25) both;
+}
+.card[data-level='4'] { --card: var(--red); --card-ink: #fff; transform: rotate(2deg); }
+.card[data-level='2'],
+.card[data-level='1'] { --card: var(--paper); --card-ink: var(--ink); transform: none; }
+
+@keyframes raise {
+  from { transform: translateY(70vh) rotate(-14deg); }
+}
+
+.card-head {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  gap: 16px;
+  font-weight: 600;
+  font-size: 14px;
+}
+.card-name { font-family: var(--display); font-weight: 800; font-size: 22px; letter-spacing: 0.01em; }
+.card-meta { opacity: 0.75; }
+
+.line {
+  margin: 20px 0 12px;
+  font-family: var(--display);
+  font-weight: 900;
+  font-size: clamp(44px, 6.4vw, 76px);
+  line-height: 0.98;
+  letter-spacing: -0.005em;
+  text-wrap: balance;
+}
+.card.long .line { font-size: clamp(32px, 4.2vw, 50px); line-height: 1.02; }
+.goal { font-size: 16px; opacity: 0.8; margin-bottom: 28px; }
+
+.options { display: flex; flex-wrap: wrap; gap: 10px; }
+.opt {
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+  min-height: 46px;
+  padding: 0 18px 0 12px;
+  border: 2px solid var(--card-ink);
+  border-radius: 10px;
+  background: transparent;
+  font-weight: 700;
+  font-size: 15px;
+  color: var(--card-ink);
+}
+.opt kbd {
+  display: inline-grid;
+  place-items: center;
+  width: 22px;
+  height: 22px;
+  border-radius: 5px;
+  background: var(--card-ink);
+  color: var(--card);
+  font: 700 12px var(--body);
+}
+.opt:hover { background: rgba(16, 24, 32, 0.08); }
+.card[data-level='4'] .opt:hover { background: rgba(255, 255, 255, 0.14); }
+.opt.primary { background: var(--card-ink); color: var(--card); }
+.opt.primary kbd { background: var(--card); color: var(--card-ink); }
+
+.answer { display: flex; gap: 10px; margin-top: 22px; align-items: stretch; }
+.mic {
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+  padding: 0 16px;
+  min-height: 42px;
+  border: 0;
+  border-radius: 999px;
+  background: rgba(16, 24, 32, 0.12);
+  color: var(--card-ink);
+  font-weight: 600;
+}
+.card[data-level='4'] .mic { background: rgba(255, 255, 255, 0.18); }
+.mic-dot { width: 10px; height: 10px; border-radius: 50%; background: currentColor; opacity: 0.6; }
+.mic.live .mic-dot { background: var(--red); opacity: 1; animation: pulse 1s ease-in-out infinite; }
+.card[data-level='4'] .mic.live .mic-dot { background: #fff; }
+@keyframes pulse { 50% { transform: scale(1.5); } }
+
+.reply { flex: 1; display: flex; }
+.reply input {
+  flex: 1;
+  min-width: 0;
+  padding: 0 14px;
+  border: 0;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.55);
+  color: var(--ink);
+}
+.card[data-level='1'] .reply input,
+.card[data-level='2'] .reply input { background: var(--chalk); }
+.reply input::placeholder { color: rgba(16, 24, 32, 0.55); }
+
+.status { min-height: 20px; margin-top: 14px; font-size: 14px; opacity: 0.8; }
+
+/* A friend's Lock In bomb: the card shakes in, and stays put for 5 seconds. */
+.card.locked { animation: bomb-in 0.5s cubic-bezier(0.2, 0.9, 0.3, 1.2) both; }
+.card.locked .status { font-family: var(--display); font-weight: 800; font-size: 26px; opacity: 1; }
+@keyframes bomb-in {
+  0% { transform: scale(1.35) rotate(-6deg); opacity: 0; }
+  55% { transform: scale(0.97) rotate(3deg); opacity: 1; }
+  70% { transform: translateX(-8px) rotate(1deg); }
+  85% { transform: translateX(6px) rotate(2.5deg); }
+  100% { transform: rotate(2deg); }
+}
+@media (prefers-reduced-motion: reduce) { .card.locked { animation: none; } }
+body.bomb .scrim { background: rgba(140, 8, 18, 0.78); }

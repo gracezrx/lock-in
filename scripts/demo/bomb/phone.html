@@ -1,0 +1,139 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <title>Your phone</title>
+    <!-- Lock In's phone page (Friends), with the app's own phone.css. -->
+    <link rel="stylesheet" href="/phone.css" />
+    <style>
+      *, *::before, *::after { animation: none !important; transition: none !important; }
+      html, body { width: 390px; height: 844px; overflow: hidden; }
+      body { min-height: 0; position: relative; }
+      .status { height: 50px; display: flex; align-items: center; justify-content: space-between; padding: 6px 30px 0 34px; font-weight: 700; font-size: 16px; background: rgba(243, 244, 241, 0.88); }
+      .status svg { height: 13px; }
+      .island { position: absolute; left: 50%; top: 11px; width: 120px; height: 35px; margin-left: -60px; border-radius: 20px; background: #000; z-index: 50; }
+      .top { position: relative; padding-top: 6px; }
+      .view { padding-top: 16px; }
+      .tabs { position: absolute; }
+      .sheet-bg, .toast { position: absolute; }
+      .sheet { padding-bottom: 30px; }
+      .tap { position: absolute; z-index: 60; width: 54px; height: 54px; margin: -27px 0 0 -27px; border-radius: 50%; background: rgba(16, 24, 32, 0.22); box-shadow: 0 0 0 2px rgba(255, 255, 255, 0.9); pointer-events: none; }
+    </style>
+  </head>
+  <body>
+    <div class="island"></div>
+    <div class="status">
+      <span>2:14</span>
+      <svg viewBox="0 0 64 14" aria-hidden="true"><g fill="#101820"><rect x="0" y="9" width="3.4" height="4" rx="1"/><rect x="5" y="6.5" width="3.4" height="6.5" rx="1"/><rect x="10" y="4" width="3.4" height="9" rx="1"/><rect x="15" y="1" width="3.4" height="12" rx="1"/><path d="M30 4.2a9 9 0 0 1 12 0l-1.4 1.5a7 7 0 0 0-9.2 0zM32.6 7a5.2 5.2 0 0 1 6.8 0L36 10.6z"/><rect x="46" y="1" width="16" height="12" rx="3.2" fill="none" stroke="#101820" stroke-width="1.2" opacity=".5"/><rect x="47.8" y="2.8" width="12.4" height="8.4" rx="1.8"/></g></svg>
+    </div>
+    <header class="top"><div class="brand"><img src="/icon.png" alt="" /><span>Lock In</span></div><span class="mac"><i></i><span id="macName"></span></span></header>
+    <main class="view">
+      <h1 class="page-title" id="crewName"></h1>
+      <div class="bombs"><span class="bomb-row"><i class="on"></i><i class="on"></i><i class="on" id="dot3"></i></span><span id="bombsLeft"></span></div>
+      <ul class="crew card">
+        <li><div class="who"><b><span id="meName"></span><small> (you)</small></b><span class="pill locked">Locked in</span><small id="myGoal"></small></div></li>
+        <li><div class="who"><b id="themName"></b><span class="pill drifting" id="themPill">Drifting</span><small id="themWhere"></small></div><button class="btn bomb" id="bombBtn" type="button">Bomb</button></li>
+      </ul>
+      <h2>Most roasted this week</h2>
+      <ol class="board card"><li><span class="rank">1</span><span class="name" id="rank1"></span><b>6</b></li><li><span class="rank">2</span><span class="name" id="rank2"></span><b>1</b></li></ol>
+    </main>
+    <nav class="tabs">
+      <button type="button"><span class="ic"><svg viewBox="0 0 24 24"><rect x="4" y="10" width="16" height="11" rx="2.5"/><path d="M8 10V7a4 4 0 0 1 8 0v3"/></svg></span><span>Lock in</span></button>
+      <button type="button"><span class="ic"><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="8.5"/><path d="m8.2 12.3 2.6 2.6 5-5.4"/></svg></span><span>To-dos</span></button>
+      <button type="button" class="on"><span class="ic"><svg viewBox="0 0 24 24"><circle cx="9" cy="9" r="3.2"/><path d="M3.5 19.5c.6-3.2 2.8-5 5.5-5s4.9 1.8 5.5 5"/><circle cx="16.8" cy="8.6" r="2.6"/><path d="M15.6 13.8c2.6-.3 4.5 1.4 5 4.4"/></svg></span><span>Friends</span></button>
+      <button type="button"><span class="ic"><svg viewBox="0 0 24 24"><path d="M4.5 6.5A2.5 2.5 0 0 1 7 4h10a2.5 2.5 0 0 1 2.5 2.5v7A2.5 2.5 0 0 1 17 16h-6l-4.5 3.8V16H7a2.5 2.5 0 0 1-2.5-2.5z"/></svg></span><span>Coach</span></button>
+    </nav>
+
+    <div class="sheet-bg" id="sheetBg">
+      <div class="sheet" id="sheet">
+        <h2 id="sheetTitle"></h2>
+        <p class="muted small">Their screen goes red for 5 seconds and their coach reads it out. 3 left today.</p>
+        <div class="insults" id="insults"></div>
+        <textarea rows="2" placeholder="Or write your own" aria-label="Your own insult"></textarea>
+        <div class="row"><button class="btn" type="button">Cancel</button><button class="btn ink red-btn" id="throwBtn" type="button">Throw it</button></div>
+      </div>
+    </div>
+    <div class="toast" id="toast"></div>
+    <div class="tap" id="tap"></div>
+
+    <script src="beats.js"></script>
+    <script>
+      const { CAST, B, seg, ease } = window.LOCKIN_BOMB;
+      const $ = (id) => document.getElementById(id);
+      $('macName').textContent = `${CAST.me}'s MacBook Air`;
+      $('crewName').textContent = CAST.crew;
+      $('meName').textContent = CAST.me;
+      $('myGoal').textContent = CAST.myGoal;
+      $('themName').textContent = CAST.them;
+      $('rank1').textContent = CAST.them;
+      $('rank2').textContent = CAST.me;
+      $('sheetTitle').textContent = `Bomb ${CAST.them}`;
+      $('toast').textContent = `Bomb thrown at ${CAST.them}.`;
+      const INSULTS = ['Touch grass later. Touch your to-do list now.', 'Your future self just filed a complaint.', 'I can hear you scrolling from here.', 'Bold of you to relax with that deadline.', 'Main character energy, side quest behavior.', 'Close it. Whatever it is. Close it.', 'Your work misses you. It told me.', 'The group chat has voted: lock in.'];
+      if (!INSULTS.includes(CAST.line)) INSULTS.splice(2, 1, CAST.line);
+      for (const s of INSULTS) {
+        const c = document.createElement('button');
+        c.type = 'button';
+        c.className = 'chip';
+        c.textContent = s;
+        $('insults').append(c);
+      }
+      const chips = [...document.querySelectorAll('.insults .chip')];
+      const pickIx = INSULTS.indexOf(CAST.line);
+      const center = (el) => {
+        const r = el.getBoundingClientRect();
+        return { x: r.x + r.width / 2, y: r.y + r.height / 2 };
+      };
+      // Where each tap lands, measured once the sheet is in place.
+      let spots = null;
+      const measure = () => {
+        $('sheetBg').style.display = 'flex';
+        $('sheet').style.transform = 'none';
+        spots = { bomb: center($('bombBtn')), chip: center(chips[pickIx]), throw: center($('throwBtn')) };
+      };
+
+      window.render = (t) => {
+        if (!spots) measure();
+        // The sheet
+        const up = ease.out(seg(t, B.sheetUp[0], B.sheetUp[1]));
+        const down = ease.in(seg(t, B.sheetDown[0], B.sheetDown[1]));
+        const open = t >= B.sheetUp[0] && t < B.sheetDown[1];
+        $('sheetBg').style.display = open ? 'flex' : 'none';
+        $('sheetBg').style.background = `rgba(16, 24, 32, ${0.45 * up * (1 - down)})`;
+        $('sheet').style.transform = `translateY(${(1 - up + down) * 100}%)`;
+        chips.forEach((c, i) => c.classList.toggle('on', i === (t >= B.tapChip ? pickIx : 0)));
+        $('throwBtn').style.transform = t >= B.tapThrow && t < B.tapThrow + 0.08 ? 'scale(0.96)' : '';
+        $('bombBtn').style.background = t >= B.tapBomb && t < B.tapBomb + 0.12 ? 'var(--red-soft)' : '';
+
+        // After the throw: one bomb fewer, then the crew sees them lock in.
+        const thrown = t >= B.sheetDown[0];
+        $('dot3').className = thrown ? '' : 'on';
+        $('bombsLeft').textContent = `${thrown ? 2 : 3} of 3 Lock In bombs left today`;
+        const back = t >= B.theyLockIn;
+        $('themPill').className = `pill ${back ? 'locked' : 'drifting'}`;
+        $('themPill').textContent = back ? 'Locked in' : 'Drifting';
+        $('themWhere').textContent = back ? CAST.goal : `on ${CAST.where}`;
+        $('bombBtn').style.display = back ? 'none' : '';
+
+        const ta = seg(t, B.phoneToast[0], B.phoneToast[0] + 0.2) * (1 - seg(t, B.phoneToast[1] - 0.3, B.phoneToast[1]));
+        $('toast').style.opacity = String(ta);
+        $('toast').style.transform = `translate(-50%, ${(1 - ta) * 8}px)`;
+
+        // Taps
+        const taps = [[B.tapBomb, spots.bomb], [B.tapChip, spots.chip], [B.tapThrow, spots.throw]];
+        const tap = taps.find(([at]) => t >= at - 0.06 && t < at + 0.22);
+        const el = $('tap');
+        if (!tap) el.style.display = 'none';
+        else {
+          const k = seg(t, tap[0] - 0.06, tap[0] + 0.22);
+          el.style.display = 'block';
+          el.style.left = `${tap[1].x}px`;
+          el.style.top = `${tap[1].y}px`;
+          el.style.opacity = String(k < 0.3 ? k / 0.3 : 1 - (k - 0.3) / 0.7);
+          el.style.transform = `scale(${0.7 + 0.5 * k})`;
+        }
+      };
+      window.spot = (name) => (spots || (measure(), spots))[name];
+    </script>
+  </body>
+</html>

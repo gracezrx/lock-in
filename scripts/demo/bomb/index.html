@@ -1,0 +1,408 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <title>Lock In bomb clip</title>
+    <!-- A vertical clip (1080x1920): your cofounder is deep in a feed, you throw a Lock In bomb
+         from your phone, KABOOM, his Mac goes red, he locks in. Record it with:
+         npm run demo:bomb   (see record.mjs for names, lines and pronouns) -->
+    <link rel="stylesheet" href="/dist/renderer/base.css" />
+    <!-- ?wide=1: the same story at 1920x1080, for X/Twitter and YouTube. -->
+    <script>if (new URLSearchParams(location.search).get('wide')) document.documentElement.classList.add('wide');</script>
+    <style>
+      *, *::before, *::after { animation: none !important; transition: none !important; }
+      html, body { width: 1080px; height: 1920px; overflow: hidden; margin: 0; }
+      body { position: relative; background: radial-gradient(120% 80% at 50% 40%, #22303c 0%, #101820 70%); font-family: var(--body); }
+
+      #world, #fx { position: absolute; left: 0; top: 0; width: 1080px; height: 1920px; transform-origin: 0 0; }
+      .laptop { position: absolute; left: 38px; top: 380px; width: 1004px; height: 648px; border-radius: 28px; background: #0b0f13; box-shadow: 0 0 0 2px #2c353d, 0 40px 90px rgba(0, 0, 0, 0.55); }
+      .laptop .screen { position: absolute; left: 22px; top: 22px; width: 960px; height: 600px; overflow: hidden; border-radius: 6px; background: #000; }
+      .laptop .base { position: absolute; left: -38px; top: 646px; width: 1080px; height: 28px; border-radius: 2px 2px 26px 26px; background: linear-gradient(#d9dde0, #a3a9ae 70%, #7d8388); }
+      .laptop .base::before { content: ''; position: absolute; left: 50%; top: 0; width: 150px; height: 9px; margin-left: -75px; border-radius: 0 0 10px 10px; background: #8d9398; }
+      .phone { position: absolute; left: 620px; top: 1130px; width: 404px; height: 846px; border-radius: 64px; background: #0b0f13; box-shadow: 0 0 0 3px #39434c, 0 40px 90px rgba(0, 0, 0, 0.55); }
+      .phone .screen { position: absolute; left: 12px; top: 12px; width: 380px; height: 822px; overflow: hidden; border-radius: 52px; background: #f3f4f1; }
+      iframe { position: absolute; left: 0; top: 0; border: 0; transform-origin: 0 0; background: transparent; }
+      #macFrame { width: 1280px; height: 800px; transform: scale(0.75); }
+      #phoneFrame { width: 390px; height: 844px; transform: scale(0.974359); }
+      .tag { position: absolute; padding: 8px 16px 9px; border-radius: 999px; background: rgba(255, 255, 255, 0.12); color: rgba(255, 255, 255, 0.86); font-family: var(--display); font-weight: 800; font-size: 30px; letter-spacing: 0.06em; text-transform: uppercase; white-space: nowrap; transform: translateX(-50%); }
+      #tagMac { left: 540px; top: 316px; }
+      #tagPhone { left: 822px; top: 1066px; }
+
+      /* Him, from behind, lit by the feed */
+      #sam { position: absolute; left: 0; top: 840px; width: 560px; height: 520px; overflow: visible; transform-origin: 250px 300px; }
+      .bubble { position: absolute; left: 300px; top: 700px; padding: 6px 30px 12px; border-radius: 32px; background: #fff; color: var(--red); font-family: var(--display); font-weight: 900; font-size: 120px; line-height: 1; box-shadow: 0 8px 0 rgba(0, 0, 0, 0.25); transform-origin: 0 100%; opacity: 0; }
+      .bubble::after { content: ''; position: absolute; left: 14px; bottom: -16px; border: 12px solid transparent; border-top: 16px solid #fff; border-left-width: 6px; }
+
+      /* Meme sticker on his screen */
+      .sticker { position: absolute; left: 716px; top: 486px; width: 254px; padding: 14px 18px 16px; border-radius: 16px; background: var(--yellow); color: var(--ink); box-shadow: 0 8px 0 rgba(0, 0, 0, 0.3); transform-origin: 50% 50%; opacity: 0; }
+      .sticker small { display: block; font-family: var(--display); font-weight: 800; font-size: 25px; line-height: 1; letter-spacing: 0.03em; text-transform: uppercase; }
+      .sticker b { display: block; font-family: var(--display); font-weight: 900; font-size: 104px; line-height: 0.9; margin: 4px 0 2px; font-variant-numeric: tabular-nums; }
+      .sticker span { font-weight: 700; font-size: 19px; }
+      .sticker.good { background: #3fd07f; }
+
+      .bomb { position: absolute; left: 0; top: 0; width: 150px; height: 150px; margin: -75px 0 0 -75px; display: none; filter: drop-shadow(0 0 3px rgba(255, 255, 255, 0.95)) drop-shadow(0 0 22px rgba(255, 207, 0, 0.7)); }
+      .puff { position: absolute; left: 0; top: 0; width: 80px; height: 80px; margin: -40px 0 0 -40px; border-radius: 50%; background: radial-gradient(circle at 40% 35%, #fff 0%, #dfe3e6 55%, rgba(200, 205, 210, 0) 72%); display: none; }
+      .boom { position: absolute; left: 540px; top: 702px; width: 10px; height: 10px; border-radius: 50%; display: none; }
+      .shard { position: absolute; left: 540px; top: 702px; width: 30px; height: 30px; margin: -15px 0 0 -15px; border-radius: 6px; display: none; }
+      #kaboom { position: absolute; left: 540px; top: 690px; width: 820px; height: 620px; margin: -310px 0 0 -410px; overflow: visible; display: none; }
+
+      .shade { position: absolute; inset: 0 0 auto 0; height: 560px; background: linear-gradient(rgba(16, 24, 32, 0.92) 0%, rgba(16, 24, 32, 0.75) 55%, rgba(16, 24, 32, 0) 100%); }
+      .cap { position: absolute; left: 60px; right: 60px; top: 190px; color: #fff; font-family: var(--display); font-weight: 900; font-size: 108px; line-height: 0.94; letter-spacing: -0.005em; text-transform: uppercase; transform-origin: 50% 100%; opacity: 0; text-shadow: 0 4px 0 rgba(0, 0, 0, 0.35); }
+      .cap y { color: var(--yellow); }
+      .flash { position: absolute; inset: 0; background: #fff; opacity: 0; }
+
+      .end { position: absolute; inset: 0; display: flex; flex-direction: column; justify-content: center; padding: 0 76px 120px; background: var(--ink); color: #fff; opacity: 0; }
+      .end img { width: 150px; height: 150px; margin-bottom: 54px; }
+      .end h1 { font-family: var(--display); font-weight: 900; font-size: 140px; line-height: 0.9; text-transform: uppercase; letter-spacing: -0.005em; }
+      .end h1 y { color: var(--yellow); }
+      .end p { margin-top: 44px; font-size: 40px; line-height: 1.3; font-weight: 600; color: rgba(255, 255, 255, 0.72); }
+      .end p b { color: #fff; font-family: var(--display); font-weight: 900; font-size: 52px; letter-spacing: 0.01em; }
+
+      /* Landscape: your phone stands beside his laptop; captions run along the top on one line. */
+      html.wide, html.wide body { width: 1920px; height: 1080px; }
+      html.wide .phone { left: 1260px; top: 380px; }
+      html.wide #tagPhone { left: 1462px; top: 316px; }
+      html.wide .shade { height: 290px; background: linear-gradient(rgba(16, 24, 32, 0.9) 0%, rgba(16, 24, 32, 0.6) 55%, rgba(16, 24, 32, 0) 100%); }
+      html.wide .cap { top: 44px; left: 60px; right: 60px; font-size: 104px; line-height: 1; white-space: nowrap; text-align: center; transform-origin: 50% 50%; }
+      html.wide .cap br { display: none; }
+      html.wide .end { padding: 0 150px 30px; }
+      html.wide .end img { width: 120px; height: 120px; margin-bottom: 40px; }
+      html.wide .end h1 { font-size: 136px; max-width: 1560px; }
+      html.wide .end p { margin-top: 36px; font-size: 36px; }
+    </style>
+  </head>
+  <body>
+    <div id="world">
+      <div class="tag" id="tagMac"></div>
+      <div class="laptop">
+        <div class="screen"><iframe id="macFrame" src="mac.html" title="His Mac"></iframe></div>
+        <div class="base"></div>
+      </div>
+      <div class="sticker" id="sticker"><small id="stTop">Reels watched</small><b id="stNum">0</b><span id="stSub">since “on it”</span></div>
+
+      <svg id="sam" viewBox="0 0 560 520" aria-hidden="true">
+        <defs>
+          <filter id="glow" x="-30%" y="-30%" width="160%" height="160%"><feGaussianBlur stdDeviation="7" /></filter>
+        </defs>
+        <g id="samBody">
+          <path d="M14 520 C20 430 40 372 120 330 C170 306 210 300 250 300 C290 300 330 306 380 330 C460 372 482 430 488 520 Z" fill="#2f3b47" />
+          <path id="rimBody" d="M40 470 C52 404 80 362 132 334 C176 312 214 306 250 306 C286 306 324 312 368 334 C420 362 448 404 460 470" fill="none" stroke-width="10" opacity=".7" filter="url(#glow)" />
+          <ellipse cx="250" cy="312" rx="148" ry="52" fill="#3a4855" />
+          <rect x="214" y="236" width="72" height="74" rx="20" fill="#c8916d" />
+        </g>
+        <g id="samHead">
+          <ellipse cx="146" cy="184" rx="17" ry="27" fill="#d29a76" />
+          <ellipse cx="354" cy="184" rx="17" ry="27" fill="#d29a76" />
+          <rect x="356" y="190" width="12" height="26" rx="6" fill="#f4f6f8" />
+          <ellipse id="rimHead" cx="250" cy="168" rx="104" ry="122" fill="none" stroke-width="12" opacity=".85" filter="url(#glow)" />
+          <ellipse cx="250" cy="168" rx="102" ry="120" fill="#1b1612" />
+          <path d="M236 50 C246 18 270 6 290 4 C278 18 276 32 280 46 Z M206 60 C204 34 216 18 232 10 C226 28 228 44 236 56 Z" fill="#1b1612" />
+          <g id="frizz" fill="#1b1612" opacity="0">
+            <path d="M150 120 L96 60 L176 96 Z M180 72 L150 -6 L214 58 Z M232 52 L236 -40 L268 46 Z M286 52 L330 -24 L318 66 Z M328 86 L404 34 L354 120 Z M350 150 L430 140 L356 186 Z M150 150 L70 132 L146 190 Z" />
+            <circle cx="214" cy="120" r="14" fill="#4b4642" opacity=".7" />
+            <circle cx="290" cy="150" r="10" fill="#4b4642" opacity=".7" />
+          </g>
+        </g>
+      </svg>
+
+      <div class="tag" id="tagPhone">Your phone</div>
+      <div class="phone"><div class="screen"><iframe id="phoneFrame" src="phone.html" title="Your phone"></iframe></div></div>
+
+    </div>
+
+    <!-- Same camera as the world, but kept sharp: the bomb is what the camera follows. -->
+    <div id="fx">
+      <div id="puffs"></div>
+      <div class="boom" id="ring1"></div>
+      <div class="boom" id="ring2"></div>
+      <div id="shards"></div>
+      <svg id="kaboom" viewBox="-410 -310 820 620" aria-hidden="true">
+        <polygon id="starOut" fill="#ffcf00" stroke="#e5202e" stroke-width="16" stroke-linejoin="round" />
+        <polygon id="starIn" fill="#ff7a1a" />
+        <text x="0" y="40" text-anchor="middle" font-family="Big Shoulders Display" font-weight="900" font-size="150" fill="#fff" stroke="#101820" stroke-width="14" paint-order="stroke" transform="rotate(-6)">KABOOM!</text>
+      </svg>
+      <div class="bubble" id="bubble">!</div>
+      <svg class="bomb" id="bomb" viewBox="0 0 150 150" aria-hidden="true">
+        <path d="M96 40c8-14 20-20 34-18" fill="none" stroke="#c9a46a" stroke-width="6" stroke-linecap="round"/>
+        <rect x="80" y="34" width="28" height="22" rx="5" transform="rotate(38 94 45)" fill="#2b3640"/>
+        <circle cx="70" cy="86" r="50" fill="#141c24"/>
+        <circle cx="70" cy="86" r="50" fill="none" stroke="#000" stroke-width="3" opacity=".4"/>
+        <ellipse cx="52" cy="66" rx="14" ry="9" transform="rotate(-35 52 66)" fill="#fff" opacity=".28"/>
+        <g id="spark" transform="translate(131 22)"><path d="M0-15 4-4 15 0 4 4 0 15-4 4-15 0-4-4z" fill="#ffcf00"/><circle r="5" fill="#fff"/></g>
+      </svg>
+    </div>
+
+    <div class="shade" id="shade"></div>
+    <div class="cap" id="cap0">Your cofounder, <br />42 min after <y>“on it”</y></div>
+    <div class="cap" id="cap1">So you throw a <br /><y>Lock In bomb</y></div>
+    <div class="cap" id="cap2"><span id="hisMac"></span> <br /><y>5 seconds. No escape.</y></div>
+    <div class="cap" id="cap3"><span id="andHe"></span> <br /><y>locked in.</y></div>
+    <div class="flash" id="flash"></div>
+
+    <div class="end" id="end">
+      <img src="/assets/logo.svg" alt="" />
+      <h1>Never worry about your cofounder <y>not responding</y> again.</h1>
+      <p><b>Lock In</b><br />the open-source focus coach for Mac</p>
+    </div>
+
+    <script src="beats.js"></script>
+    <script>
+      const { CAST, B, seg, lerp, ease, clamp, feed } = window.LOCKIN_BOMB;
+      const $ = (id) => document.getElementById(id);
+      $('tagMac').textContent = `${CAST.them}’s Mac`;
+      $('hisMac').textContent = `${CAST.his[0].toUpperCase()}${CAST.his.slice(1)} Mac goes red.`;
+      $('andHe').textContent = `…and ${CAST.he}’s`;
+      const mac = () => $('macFrame').contentWindow;
+      const phone = () => $('phoneFrame').contentWindow;
+
+      const WIDE = document.documentElement.classList.contains('wide');
+
+      // ---- camera: scale, the world point to look at, and where it lands on screen ----
+      const CAM = WIDE
+        ? {
+            deskIn: { s: 1.0, fx: 850, fy: 760, sx: 960, sy: 640 }, // his desk, your phone beside it
+            deskClose: { s: 1.06, fx: 820, fy: 745, sx: 960, sy: 640 },
+            phone: { s: 1.45, fx: 1462, fy: 905, sx: 960, sy: 630 },
+            both: { s: 0.84, fx: 851, fy: 838, sx: 960, sy: 640 }, // the whole throw in one shot
+            close: { s: 1.25, fx: 540, fy: 702, sx: 1012, sy: 615 },
+            desk: { s: 1.0, fx: 850, fy: 760, sx: 960, sy: 640 },
+          }
+        : {
+            deskIn: { s: 1.0, fx: 540, fy: 960, sx: 540, sy: 1150 }, // his desk, your phone peeking in
+            deskClose: { s: 1.12, fx: 540, fy: 800, sx: 540, sy: 1080 }, // pushing in on the feed
+            phone: { s: 1.72, fx: 822, fy: 1553, sx: 540, sy: 1165 },
+            close: { s: 1.22, fx: 540, fy: 702, sx: 540, sy: 1000 }, // his screen, up close
+            desk: { s: 1.0, fx: 540, fy: 960, sx: 540, sy: 1150 },
+          };
+      const mix = (a, b, k) => ({ s: lerp(a.s, b.s, k), fx: lerp(a.fx, b.fx, k), fy: lerp(a.fy, b.fy, k), sx: lerp(a.sx, b.sx, k), sy: lerp(a.sy, b.sy, k) });
+
+      // ---- the bomb's path: out of the Throw button, a hover, a wind-up, then a lob into his screen ----
+      const PHONE_AT = WIDE ? { x: 1272, y: 392 } : { x: 632, y: 1142 };
+      const phoneToWorld = (p) => ({ x: PHONE_AT.x + p.x * 0.974359, y: PHONE_AT.y + p.y * 0.974359 });
+      const TARGET = { x: 540, y: 702 };
+      const HOVER = WIDE ? { x: 1500, y: 980 } : { x: 860, y: 1690 };
+      const CTRL = WIDE ? { x: 1060, y: 60 } : { x: 800, y: 120 };
+      const quad = (a, c, b, k) => ({ x: (1 - k) * (1 - k) * a.x + 2 * (1 - k) * k * c.x + k * k * b.x, y: (1 - k) * (1 - k) * a.y + 2 * (1 - k) * k * c.y + k * k * b.y });
+      const flightK = (t) => {
+        const k = seg(t, B.flight[0], B.flight[1]);
+        return k * 0.8 + ease.in(k) * 0.2;
+      };
+      const windupDrop = 46;
+      function bombAt(t) {
+        const from = phoneToWorld(phone().spot?.('throw') ?? { x: 290, y: 780 });
+        if (t < B.windup[0]) {
+          const k = ease.out(seg(t, B.pop, B.pop + 0.24));
+          const p = { x: lerp(from.x, HOVER.x, k), y: lerp(from.y, HOVER.y, k) };
+          const pop = ease.back(seg(t, B.pop, B.pop + 0.18));
+          return { ...p, s: 1.15 * pop, sx: 1, sy: 1, r: Math.sin(t * 26) * 9 };
+        }
+        if (t < B.launch) {
+          const k = ease.out(seg(t, B.windup[0], B.windup[1]));
+          return { x: HOVER.x, y: HOVER.y + windupDrop * k, s: 1.15, sx: 1 + 0.18 * k, sy: 1 - 0.2 * k, r: -14 * k };
+        }
+        const k = flightK(t);
+        const start = { x: HOVER.x, y: HOVER.y + windupDrop };
+        const p = quad(start, CTRL, TARGET, k);
+        const stretch = Math.sin(Math.PI * Math.min(1, k * 4)) * 0.12;
+        return { ...p, s: lerp(1.15, 2.7, k * k), sx: 1 - stretch, sy: 1 + stretch, r: -14 + k * 760 };
+      }
+
+      function camera(t) {
+        if (t < B.toPhone[0]) return mix(CAM.deskIn, CAM.deskClose, ease.inOut(seg(t, 0, B.toPhone[0])));
+        if (t < B.launch) return mix(CAM.deskClose, CAM.phone, ease.inOut(seg(t, B.toPhone[0], B.toPhone[1])));
+        if (t < B.impact && WIDE) {
+          // Pull back to see both, then push in on his screen as it lands.
+          if (t < B.impact - 0.3) return mix(CAM.phone, CAM.both, ease.inOut(seg(t, B.launch, B.launch + 0.36)));
+          return mix(CAM.both, CAM.close, ease.in(seg(t, B.impact - 0.3, B.impact)));
+        }
+        if (t < B.impact) {
+          // Chase the bomb: pull back while it's high, land up close on his screen.
+          const k = seg(t, B.flight[0], B.flight[1]);
+          const b = bombAt(t);
+          const follow = ease.out(Math.min(1, k * 2.2));
+          const e = ease.inOut(k);
+          return {
+            s: lerp(CAM.phone.s, CAM.close.s, e) - 0.55 * Math.pow(Math.sin(Math.PI * k), 1.3),
+            fx: lerp(CAM.phone.fx, b.x, follow),
+            fy: lerp(CAM.phone.fy, b.y, follow),
+            sx: 540,
+            sy: lerp(CAM.phone.sy, CAM.close.sy, e),
+          };
+        }
+        if (t < B.toDesk[0]) return CAM.close;
+        return mix(CAM.close, CAM.desk, ease.inOut(seg(t, B.toDesk[0], B.toDesk[1])));
+      }
+      const camXf = (c) => ({ x: c.sx - c.fx * c.s, y: c.sy - c.fy * c.s });
+
+      // ---- particles ----
+      const PUFFS = Array.from({ length: 26 }, (_, i) => ({ at: B.launch + i * 0.032, drift: ((i * 37) % 21) - 10 }));
+      for (const _ of PUFFS) {
+        const el = document.createElement('div');
+        el.className = 'puff';
+        $('puffs').append(el);
+      }
+      const SHARDS = Array.from({ length: 20 }, (_, i) => {
+        const a = (i / 20) * Math.PI * 2 + (i % 3) * 0.2;
+        return { a, d: 420 + (i % 5) * 80, c: ['#ffcf00', '#e5202e', '#ff7a1a', '#fff'][i % 4], r: (i * 47) % 360 };
+      });
+      for (const s of SHARDS) {
+        const el = document.createElement('div');
+        el.className = 'shard';
+        el.style.background = s.c;
+        $('shards').append(el);
+      }
+      const star = (n, R, r) =>
+        Array.from({ length: n * 2 }, (_, i) => {
+          const a = (i / (n * 2)) * Math.PI * 2 - Math.PI / 2;
+          const rad = i % 2 ? r * (0.9 + 0.2 * ((i * 7) % 3) / 2) : R * (0.85 + 0.15 * ((i * 5) % 4) / 3);
+          return `${(Math.cos(a) * rad * 1.3).toFixed(1)},${(Math.sin(a) * rad).toFixed(1)}`;
+        }).join(' ');
+      $('starOut').setAttribute('points', star(14, 300, 190));
+      $('starIn').setAttribute('points', star(14, 220, 150));
+
+      let prevCam = null;
+      window.render = (t) => {
+        mac().render?.(t);
+        phone().render?.(t);
+
+        // Camera, with a whip-pan blur and a shake when the bomb lands.
+        const c = camera(t);
+        const p = camXf(c);
+        const before = camXf(camera(Math.max(0, t - 1 / 30)));
+        const moved = Math.hypot(p.x - before.x, p.y - before.y) + Math.abs(c.s - camera(Math.max(0, t - 1 / 30)).s) * 900;
+        const shakeK = seg(t, B.impact, B.impact + 0.55);
+        const amp = t >= B.impact ? (1 - shakeK) * 34 : 0;
+        const dx = Math.sin(t * 90) * amp;
+        const dy = Math.cos(t * 77) * amp * 0.7;
+        $('world').style.transform = $('fx').style.transform = `translate(${p.x + dx}px, ${p.y + dy}px) scale(${c.s})`;
+        const inFlight = t >= B.launch && t < B.impact;
+        const blur = moved > 30 ? Math.min(inFlight ? 5 : 10, (moved - 30) * 0.08) : 0;
+        $('world').style.filter = blur > 0.4 ? `blur(${blur.toFixed(1)}px)` : 'none';
+        const tagFade = WIDE ? clamp((1.2 - c.s) / 0.08) : clamp((1.3 - c.s) / 0.1);
+        $('tagPhone').style.opacity = String(tagFade);
+        $('tagMac').style.opacity = String(tagFade);
+
+        // Him: lit by whatever's on the feed, bobbing along; jumps at the blast; types after.
+        const f = feed(t);
+        const rim = t < B.impact ? f.reel.tint : t < B.cardOut[1] ? '#e5202e' : '#cfe0ff';
+        $('rimHead').setAttribute('stroke', rim);
+        $('rimBody').setAttribute('stroke', rim);
+        const jump = t >= B.impact ? Math.max(0, Math.sin(Math.PI * seg(t, B.impact, B.impact + 0.32))) * 70 + Math.max(0, Math.sin(Math.PI * seg(t, B.impact + 0.32, B.impact + 0.5))) * 14 : 0;
+        const noticeTurn = t >= B.notice && t < B.impact ? ease.out(seg(t, B.notice, B.notice + 0.12)) * 6 : 0;
+        const shakeNo = t > B.impact + 0.6 && t < B.unlock ? Math.sin((t - B.impact) * 22) * 4 * (1 - seg(t, B.unlock - 0.5, B.unlock)) : 0;
+        const typing = t >= B.typing[0] && t < B.typing[1] ? Math.abs(Math.sin(t * 34)) * 5 : 0;
+        const lean = ease.inOut(seg(t, B.cardOut[1], B.cardOut[1] + 0.4)) * 18;
+        const bob = t < B.impact ? Math.sin(t * 5) * 3 : 0;
+        $('samHead').setAttribute('transform', `translate(0 ${(-jump + bob + lean + typing).toFixed(1)}) rotate(${(noticeTurn + shakeNo).toFixed(2)} 250 250)`);
+        $('samBody').setAttribute('transform', `translate(0 ${(-jump * 0.35 + lean * 0.4).toFixed(1)})`);
+        $('frizz').setAttribute('opacity', t >= B.impact ? '1' : '0');
+        $('frizz').setAttribute('transform', `translate(250 120) scale(1 ${t >= B.impact ? lerp(1.5, 1, ease.out(seg(t, B.impact, B.impact + 0.5))) : 1}) translate(-250 -120)`);
+
+        // "!" when he spots it, "?!" after.
+        const bub = $('bubble');
+        const showBub = t >= B.notice && t < B.impact + 1.1;
+        bub.textContent = t < B.impact ? '!' : '?!';
+        // Off to the side after the blast, so it doesn't cover the card.
+        bub.style.left = `${t < B.impact ? 300 : 96}px`;
+        bub.style.top = `${t < B.impact ? 700 : 780}px`;
+        const bk = ease.back(seg(t, t < B.impact ? B.notice : B.impact + 0.08, (t < B.impact ? B.notice : B.impact + 0.08) + 0.16));
+        bub.style.opacity = showBub ? String(clamp(bk * 2) * (1 - seg(t, B.impact + 0.95, B.impact + 1.1))) : '0';
+        bub.style.transform = `translateY(${-jump}px) scale(${lerp(0.4, 1, bk)}) rotate(${t < B.impact ? -6 : 8}deg)`;
+
+        // The sticker: reels counted up as he scrolls; after the bomb, a different count.
+        const st = $('sticker');
+        const counting = t < B.toPhone[0] + 0.1;
+        const after = t >= B.typing[0];
+        const sk = counting ? ease.back(seg(t, 0.35, 0.55)) : after ? ease.back(seg(t, B.typing[0] + 0.25, B.typing[0] + 0.45)) : 0;
+        st.style.opacity = counting || after ? String(clamp(sk * 2)) : '0';
+        st.classList.toggle('good', after);
+        $('stTop').textContent = 'Reels watched';
+        $('stSub').textContent = after ? 'since the bomb' : `since “on it”`;
+        $('stNum').textContent = after ? '0' : String(Math.round(171 + f.pos * 4.7));
+        const last = B.swipes.filter((s) => s <= t).pop();
+        const pulse = counting && last !== undefined ? 1 + Math.max(0, 0.12 - (t - last)) * 1.2 : 1;
+        st.style.transform = `translateY(${after ? 64 : 0}px) rotate(${after ? -5 : 6}deg) scale(${(lerp(0.5, 1, sk) * pulse).toFixed(3)})`;
+
+        // The bomb, and the smoke it leaves behind.
+        const bomb = $('bomb');
+        if (t < B.pop || t >= B.impact) bomb.style.display = 'none';
+        else {
+          const b = bombAt(t);
+          bomb.style.display = 'block';
+          bomb.style.transform = `translate(${b.x}px, ${b.y}px) rotate(${b.r}deg) scale(${b.s * b.sx}, ${b.s * b.sy})`;
+          $('spark').setAttribute('transform', `translate(131 22) scale(${0.9 + 0.6 * Math.abs(Math.sin(t * 40))}) rotate(${t * 900})`);
+        }
+        [...$('puffs').children].forEach((el, i) => {
+          const pf = PUFFS[i];
+          const age = t - pf.at;
+          if (age < 0 || age > 0.6 || pf.at >= B.impact) {
+            el.style.display = 'none';
+            return;
+          }
+          const b = bombAt(pf.at);
+          const k = age / 0.6;
+          el.style.display = 'block';
+          el.style.opacity = String(0.85 * (1 - k));
+          el.style.transform = `translate(${b.x + pf.drift * k * 4}px, ${b.y - 30 * k}px) scale(${(0.5 + 1.4 * ease.out(k)) * lerp(1, 2, (pf.at - B.launch) / (B.impact - B.launch))})`;
+        });
+
+        // The blast: rings, shards, KABOOM.
+        const bk2 = seg(t, B.impact, B.impact + 0.5);
+        const blast = t >= B.impact && bk2 < 1;
+        [['ring1', 1500, '#ffcf00'], ['ring2', 1050, '#fff']].forEach(([id, size, col], i) => {
+          const el = $(id);
+          el.style.display = blast ? 'block' : 'none';
+          if (!blast) return;
+          const k = ease.out(seg(t, B.impact + i * 0.04, B.impact + 0.5));
+          const d = size * k;
+          el.style.width = `${d}px`;
+          el.style.height = `${d}px`;
+          el.style.margin = `${-d / 2}px 0 0 ${-d / 2}px`;
+          el.style.border = `${lerp(70, 4, k)}px solid ${col}`;
+          el.style.opacity = String(1 - k);
+        });
+        [...$('shards').children].forEach((el, i) => {
+          const s = SHARDS[i];
+          el.style.display = blast ? 'block' : 'none';
+          if (!blast) return;
+          const k = ease.out(bk2);
+          el.style.transform = `translate(${Math.cos(s.a) * s.d * k}px, ${Math.sin(s.a) * s.d * k + 200 * k * k}px) rotate(${s.r + k * 360}deg) scale(${1.5 - k})`;
+          el.style.opacity = String(1 - k * k);
+        });
+        const kb = $('kaboom');
+        const kIn = ease.back(seg(t, B.impact, B.impact + 0.16));
+        const kOut = ease.in(seg(t, B.impact + 0.5, B.impact + 0.66));
+        kb.style.display = t >= B.impact && kOut < 1 ? 'block' : 'none';
+        kb.style.opacity = String(1 - kOut);
+        kb.style.transform = `scale(${lerp(0.15, 1, kIn) * (1 + kOut * 0.35) * (1 + Math.sin((t - B.impact) * 40) * 0.02)}) rotate(${-6 + Math.sin((t - B.impact) * 12) * 3}deg)`;
+        $('flash').style.opacity = String(t >= B.impact ? Math.max(0, 0.9 * (1 - seg(t, B.impact, B.impact + 0.14))) : 0);
+
+        // Captions
+        const caps = [
+          [0.05, B.toPhone[0] + 0.12],
+          [B.toPhone[0] + 0.14, B.impact - 0.04],
+          [B.impact + 0.75, B.cardOut[0]],
+          [B.cardOut[1] + 0.1, B.endCard[0]],
+        ];
+        caps.forEach(([a, b], i) => {
+          const el = $(`cap${i}`);
+          const inK = ease.back(seg(t, a, a + 0.16));
+          const out = seg(t, b - 0.08, b);
+          const on = t >= a && t < b;
+          el.style.opacity = on ? String(clamp(seg(t, a, a + 0.1)) * (1 - out)) : '0';
+          el.style.transform = `scale(${lerp(0.9, 1, inK)})`;
+        });
+
+        // End card: wipes up over everything, then its words settle in.
+        const e = ease.inOut(seg(t, B.endCard[0], B.endCard[1]));
+        $('end').style.opacity = t >= B.endCard[0] ? '1' : '0';
+        $('end').style.transform = `translateY(${(1 - e) * 1920}px)`;
+        [...$('end').children].forEach((el, i) => {
+          const k = ease.out(seg(t, B.endCard[1] - 0.12 + i * 0.07, B.endCard[1] + 0.2 + i * 0.07));
+          el.style.opacity = String(k);
+          el.style.transform = `translateY(${(1 - k) * 40}px)`;
+        });
+      };
+    </script>
+  </body>
+</html>

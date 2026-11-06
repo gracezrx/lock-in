@@ -1,0 +1,25 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta http-equiv="Content-Security-Policy" content="default-src 'self'; style-src 'self' 'unsafe-inline'; font-src 'self'; script-src 'self'" />
+    <title>Lock In</title>
+    <link rel="stylesheet" href="base.css" />
+    <link rel="stylesheet" href="toast.css" />
+  </head>
+  <body>
+    <article class="toast" id="toast" role="status" aria-live="polite">
+      <div class="stripe"></div>
+      <div class="content">
+        <header class="head">
+          <h1 class="title" id="title"></h1>
+          <button class="close" id="close" type="button" aria-label="Dismiss">×</button>
+        </header>
+        <p class="body" id="body"></p>
+        <p class="timer" id="timer" hidden></p>
+        <div class="actions" id="actions"></div>
+      </div>
+    </article>
+    <script src="toast.js"></script>
+  </body>
+</html>

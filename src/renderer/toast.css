@@ -1,0 +1,39 @@
+html, body { background: transparent; overflow: hidden; }
+body { padding: 6px 8px 18px; }
+
+.toast {
+  --accent: var(--ink);
+  display: flex;
+  overflow: hidden;
+  border-radius: 12px;
+  background: var(--paper);
+  box-shadow: 0 0 0 1px rgba(16, 24, 32, 0.12), 0 12px 32px rgba(16, 24, 32, 0.22);
+  animation: drop 260ms cubic-bezier(0.2, 0.9, 0.3, 1.1) both;
+}
+.toast[data-kind='nudge'],
+.toast[data-kind='speak'] { --accent: var(--yellow); }
+.toast[data-kind='starter'],
+.toast[data-kind='schedule'],
+.toast[data-kind='checkin'] { --accent: var(--turf); }
+.toast[data-kind='break'] { --accent: var(--line); }
+.toast[data-kind='roast'] { --accent: var(--red); }
+.toast[data-kind='win'] { --accent: var(--turf); }
+.toast[data-kind='routine'] { --accent: var(--ink); }
+.toast[data-kind='wellness'] { --accent: #5aa9e6; }
+.toast[data-kind='bedtime'] { --accent: #6b5bd6; }
+.toast[data-kind='meeting'] { --accent: #5aa9e6; }
+.toast[data-kind='deadline'] { --accent: #ff7a1a; }
+
+@keyframes drop { from { transform: translateY(-14px); opacity: 0; } }
+
+.stripe { flex: 0 0 10px; background: var(--accent); }
+.content { flex: 1; padding: 14px 16px 16px; min-width: 0; }
+.head { display: flex; justify-content: space-between; align-items: center; gap: 8px; }
+.title { font-family: var(--display); font-weight: 800; font-size: 22px; line-height: 1.1; }
+.close { border: 0; background: none; font-size: 22px; line-height: 1; color: var(--ink-3); padding: 0 2px; }
+.close:hover { color: var(--ink); }
+.body { margin-top: 4px; font-size: 15px; line-height: 1.4; color: var(--ink); }
+.timer { margin-top: 8px; font-family: var(--display); font-weight: 800; font-size: 28px; }
+.actions { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 12px; }
+.actions:empty { display: none; }
+.actions .btn { min-height: 34px; font-size: 13px; padding: 0 12px; }
