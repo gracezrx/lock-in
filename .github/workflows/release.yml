@@ -1,0 +1,49 @@
+# Builds the downloadable Mac app on Apple silicon and publishes it as a GitHub release,
+# once per version: bump "version" in package.json (and .github/release-notes.md) and push.
+name: Release
+
+on:
+  push:
+    branches: [main]
+    paths: [package.json, .github/release-notes.md, .github/workflows/release.yml]
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  mac:
+    runs-on: macos-14
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Version
+        id: v
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          v="$(node -p "require('./package.json').version")"
+          echo "version=$v" >> "$GITHUB_OUTPUT"
+          if gh release view "v$v" >/dev/null 2>&1; then echo "exists=true" >> "$GITHUB_OUTPUT"; else echo "exists=false" >> "$GITHUB_OUTPUT"; fi
+
+      - if: steps.v.outputs.exists == 'false'
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - if: steps.v.outputs.exists == 'false'
+        run: npm ci
+
+      - name: Build Lock In.app
+        if: steps.v.outputs.exists == 'false'
+        run: npm run package:mac
+
+      - name: Publish the release
+        if: steps.v.outputs.exists == 'false'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          v="${{ steps.v.outputs.version }}"
+          gh release create "v$v" release/Lock-In-mac-arm64.zip \
+            --title "Lock In $v" --notes-file .github/release-notes.md --target "$GITHUB_SHA"

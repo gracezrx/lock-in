@@ -1,0 +1,74 @@
+{
+  "name": "lock-in",
+  "productName": "Lock In",
+  "version": "0.3.0",
+  "description": "A desktop focus coach that watches what you work on and talks (then yells) you back to work.",
+  "type": "module",
+  "main": "dist/main/index.js",
+  "private": true,
+  "license": "MIT",
+  "repository": "github:gracezrx/lock-in",
+  "scripts": {
+    "build": "node build.mjs",
+    "helper": "bash native/mac-helper/build.sh",
+    "dev": "npm run helper && npm run build && electron .",
+    "start": "npm run build && electron .",
+    "typecheck": "tsc --noEmit",
+    "test": "tsx --test test/*.test.ts",
+    "demo": "node scripts/demo/record.mjs",
+    "demo:bomb": "node scripts/demo/bomb/record.mjs",
+    "demo:bomb:wide": "node scripts/demo/bomb/record.mjs --wide",
+    "package:mac": "npm run helper && npm run build && node scripts/package-mac.mjs"
+  },
+  "dependencies": {
+    "@elevenlabs/client": "1.30.0",
+    "fflate": "^0.8.3",
+    "ical.js": "2.2.1",
+    "qrcode": "1.5.4",
+    "tweetnacl": "1.0.3",
+    "ws": "^8.22.0"
+  },
+  "devDependencies": {
+    "@fontsource/big-shoulders-display": "^5.3.0",
+    "@fontsource/big-shoulders-stencil-display": "^5.3.0",
+    "@fontsource/public-sans": "^5.3.0",
+    "@types/node": "^24.0.0",
+    "@types/qrcode": "^1.5.6",
+    "@types/ws": "^8.18.2",
+    "electron": "^44.9.0",
+    "electron-builder": "^26.0.0",
+    "esbuild": "^0.28.2",
+    "tsx": "^4.23.15",
+    "typescript": "^5.9.3"
+  },
+  "build": {
+    "appId": "app.lockin.desktop",
+    "productName": "Lock In",
+    "files": [
+      "dist/**/*",
+      "assets/**/*",
+      "package.json"
+    ],
+    "extraResources": [
+      {
+        "from": "extension",
+        "to": "extension"
+      },
+      {
+        "from": "native/mac-helper/build/lockin-helper",
+        "to": "lockin-helper"
+      }
+    ],
+    "mac": {
+      "category": "public.app-category.productivity",
+      "target": [
+        "dmg"
+      ],
+      "extendInfo": {
+        "LSUIElement": false,
+        "NSMicrophoneUsageDescription": "Lock In listens only during an intervention, so you can answer your coach.",
+        "NSAppleEventsUsageDescription": "Lock In hides distracting apps and reads the active browser tab when the extension is not installed."
+      }
+    }
+  }
+}

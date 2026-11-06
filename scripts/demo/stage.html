@@ -1,0 +1,119 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <title>Lock In demo</title>
+    <!-- The README demo, as a scripted scene. Record it with: npm run demo -->
+    <link rel="stylesheet" href="../../dist/renderer/base.css" />
+    <link rel="stylesheet" href="../../dist/renderer/intro.css" />
+    <style>
+      html, body { width: 1280px; height: 800px; overflow: hidden; }
+      body { position: relative; background: linear-gradient(160deg, #c9d3cc 0%, #9fb0aa 55%, #7f938f 100%); font-family: var(--body); }
+
+      /* macOS-style menu bar */
+      .menubar { position: absolute; inset: 0 0 auto 0; height: 28px; display: flex; align-items: center; gap: 18px; padding: 0 16px; background: rgba(255, 255, 255, 0.55); backdrop-filter: blur(18px); font-size: 13px; font-weight: 600; color: var(--ink); z-index: 5; }
+      .menubar .left { display: flex; gap: 18px; }
+      .menubar .left span:first-child { font-weight: 800; }
+      .menubar .right { margin-left: auto; display: flex; align-items: center; gap: 16px; }
+      .lockin-item { display: flex; align-items: center; gap: 6px; padding: 2px 8px; border-radius: 5px; font-variant-numeric: tabular-nums; transition: background-color 0.2s; }
+      .lockin-item svg { width: 15px; height: 15px; }
+      .lockin-item .hey { display: none; padding: 1px 6px; border-radius: 4px; background: var(--yellow); font-weight: 800; letter-spacing: 0.02em; }
+      .lockin-item.alert .hey { display: inline; }
+      .lockin-item.alert .time { display: none; }
+
+      /* the browser */
+      .browser { position: absolute; left: 64px; top: 50px; width: 1152px; height: 698px; border-radius: 12px; overflow: hidden; background: #fff; box-shadow: 0 0 0 1px rgba(16, 24, 32, 0.18), 0 30px 70px rgba(16, 24, 32, 0.35); }
+      .tabs { height: 40px; display: flex; align-items: flex-end; gap: 2px; padding: 0 10px 0 82px; background: #dde2e5; position: relative; }
+      .lights { position: absolute; left: 16px; top: 14px; display: flex; gap: 8px; }
+      .lights i { width: 12px; height: 12px; border-radius: 50%; background: #ff5f57; }
+      .lights i:nth-child(2) { background: #febc2e; }
+      .lights i:nth-child(3) { background: #28c840; }
+      .tab { display: flex; align-items: center; gap: 8px; width: 230px; height: 32px; padding: 0 12px; border-radius: 9px 9px 0 0; font-size: 12.5px; font-weight: 500; color: var(--ink-2); white-space: nowrap; overflow: hidden; }
+      .tab.on { background: #fff; color: var(--ink); }
+      .tab .fav { flex: none; width: 14px; height: 14px; border-radius: 3px; }
+      .tab .label { overflow: hidden; text-overflow: ellipsis; }
+      .newtab { width: 28px; height: 28px; margin: 0 0 2px 4px; display: grid; place-items: center; font-size: 20px; color: var(--ink-2); border-radius: 6px; }
+      .toolbar { height: 44px; display: flex; align-items: center; gap: 14px; padding: 0 14px; border-bottom: 1px solid #e3e5e0; }
+      .toolbar .nav { display: flex; gap: 14px; color: var(--ink-3); font-size: 16px; }
+      .omnibox { flex: 1; height: 30px; display: flex; align-items: center; padding: 0 14px; border-radius: 15px; background: #eef0f2; font-size: 14px; color: var(--ink); }
+      .omnibox .caret { width: 1.5px; height: 16px; margin-left: 1px; background: var(--ink); animation: blink 1s steps(1) infinite; display: none; }
+      .omnibox.typing .caret { display: inline-block; }
+      @keyframes blink { 50% { opacity: 0; } }
+      .viewport { position: absolute; inset: 84px 0 0 0; }
+      .viewport iframe { position: absolute; inset: 0; width: 100%; height: 100%; border: 0; display: none; }
+      .viewport iframe.on { display: block; }
+
+      /* Lock In's corner card (same look as the app's) */
+      .toast { position: absolute; top: 40px; right: 16px; width: 372px; display: flex; overflow: hidden; border-radius: 12px; background: #fff; box-shadow: 0 0 0 1px rgba(16, 24, 32, 0.12), 0 12px 32px rgba(16, 24, 32, 0.28); z-index: 6; opacity: 0; transform: translateY(-14px); transition: opacity 0.26s, transform 0.26s cubic-bezier(0.2, 0.9, 0.3, 1.1); }
+      .toast.on { opacity: 1; transform: none; }
+      .toast .stripe { flex: 0 0 10px; background: var(--yellow); }
+      .toast .content { flex: 1; padding: 14px 16px 16px; }
+      .toast .title { font-family: var(--display); font-weight: 800; font-size: 22px; line-height: 1.1; }
+      .toast .body { margin-top: 4px; font-size: 15px; line-height: 1.4; }
+      .toast .actions { display: flex; gap: 8px; margin-top: 12px; }
+      .toast .btn { min-height: 34px; padding: 0 12px; font-size: 13px; }
+
+      /* what the coach says out loud */
+      .voice { position: absolute; left: 50%; bottom: 74px; transform: translateX(-50%); max-width: 860px; display: none; align-items: flex-start; gap: 12px; padding: 12px 18px; border-radius: 12px; background: rgba(16, 24, 32, 0.92); color: #fff; font-size: 19px; line-height: 1.35; font-weight: 500; z-index: 7; }
+      .voice.on { display: flex; }
+      .voice svg { flex: none; width: 24px; height: 24px; margin-top: 1px; }
+
+      /* the story, one line at a time */
+      .caption { position: absolute; left: 50%; bottom: 10px; transform: translateX(-50%); padding: 5px 14px 6px; border-radius: 999px; background: var(--ink); color: #fff; font-family: var(--display); font-weight: 800; font-size: 20px; letter-spacing: 0.01em; white-space: nowrap; z-index: 8; transition: opacity 0.2s; }
+      .caption.off { opacity: 0; }
+
+      .cursor { position: absolute; left: 0; top: 0; width: 22px; height: 30px; z-index: 9; pointer-events: none; filter: drop-shadow(0 1px 1px rgba(0, 0, 0, 0.35)); }
+
+      .outro { position: absolute; left: 50%; bottom: 70px; transform: translateX(-50%); z-index: 10001; font-size: 18px; font-weight: 600; color: var(--ink-2); opacity: 0; white-space: nowrap; }
+    </style>
+  </head>
+  <body>
+    <div class="menubar">
+      <div class="left"><span>Browser</span><span>File</span><span>Edit</span><span>View</span><span>History</span><span>Window</span></div>
+      <div class="right">
+        <div class="lockin-item" id="lockinItem">
+          <svg viewBox="0 0 1024 1024" aria-hidden="true"><g transform="translate(512 512) scale(1.05) translate(-512 -529)"><path d="M375 526V430a137 137 0 0 1 274 0V526" fill="none" stroke="#101820" stroke-width="80"/><rect x="292" y="486" width="440" height="314" rx="48" fill="#101820"/></g></svg>
+          <span class="time" id="clock">41:12</span><span class="hey">HEY</span>
+        </div>
+        <span>Sat 2:14 PM</span>
+      </div>
+    </div>
+
+    <div class="browser">
+      <div class="tabs" id="tabs">
+        <div class="lights"><i></i><i></i><i></i></div>
+        <div class="tab on" id="tabDoc"><span class="fav" style="background:#3b7ddd"></span><span class="label">Pitch deck draft</span></div>
+        <div class="newtab" id="newTab">+</div>
+      </div>
+      <div class="toolbar">
+        <div class="nav"><span>←</span><span>→</span><span>↻</span></div>
+        <div class="omnibox" id="omnibox"><span id="url">docs.example.com/pitch-deck</span><span class="caret"></span></div>
+      </div>
+      <div class="viewport">
+        <iframe id="docFrame" class="on" title="Pitch deck draft"></iframe>
+        <iframe id="vidFrame" title="Video"></iframe>
+      </div>
+    </div>
+
+    <div class="toast" id="toast">
+      <div class="stripe"></div>
+      <div class="content">
+        <div class="title">Coach</div>
+        <div class="body">Cats. Again. The deck is one tab over, babe.</div>
+        <div class="actions"><span class="btn btn-ink">Back to work</span><span class="btn btn-quiet">This is work</span></div>
+      </div>
+    </div>
+
+    <div class="voice" id="voice">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M11 5 6 9H3v6h3l5 4V5z"/><path d="M15.5 8.5a5 5 0 0 1 0 7"/><path d="M18.5 5.5a9 9 0 0 1 0 13"/></svg>
+      <span id="voiceText"></span>
+    </div>
+
+    <div class="caption off" id="caption"></div>
+    <div class="outro" id="outro">A focus coach for your Mac. Free and open source.</div>
+
+    <svg class="cursor" id="cursor" viewBox="0 0 22 30" aria-hidden="true"><path d="M2 2v22l6-6 4 9 4-2-4-9h8z" fill="#fff" stroke="#101820" stroke-width="1.6" stroke-linejoin="round"/></svg>
+
+    <script src="stage.js"></script>
+  </body>
+</html>

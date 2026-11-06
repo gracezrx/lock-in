@@ -1,0 +1,30 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta http-equiv="Content-Security-Policy" content="default-src 'self'; style-src 'self' 'unsafe-inline'; font-src 'self'; script-src 'self'; img-src 'self' data:" />
+    <title>Lock In</title>
+    <link rel="stylesheet" href="base.css" />
+    <link rel="stylesheet" href="app.css" />
+    <link rel="stylesheet" href="intro.css" />
+    <link rel="stylesheet" href="jail.css" />
+  </head>
+  <body>
+    <div class="app">
+      <nav class="rail" aria-label="Main">
+        <div class="brand" role="button" tabindex="0" title="Play the intro again"><svg class="brand-mark" aria-hidden="true" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1024 1024"><rect width="1024" height="1024" rx="230" fill="#111"/><g transform="translate(512 512) scale(0.82) translate(-512 -529)"><path d="M375.0 526V430a137.0 137.0 0 0 1 274.0 0V526" fill="none" stroke="#d4ff3a" stroke-width="70"/><rect x="292" y="486" width="440" height="314" rx="48" fill="#d4ff3a"/><circle cx="512" cy="615" r="42" fill="#111"/><rect x="491" y="622" width="42" height="94" rx="20" fill="#111"/></g></svg>Lock In</div>
+        <a href="#home" data-route="home">Lock in</a>
+        <a href="#todos" data-route="todos">To-dos</a>
+        <a href="#goals" data-route="goals" id="railGoals">Goals <span class="beta-tag">Beta</span></a>
+        <a href="#progress" data-route="progress">Progress</a>
+        <a href="#friends" data-route="friends">Friends</a>
+        <a href="#coach" data-route="coach">Coach</a>
+        <a href="#settings" data-route="settings">Settings</a>
+        <div class="rail-foot" id="railFoot"></div>
+      </nav>
+      <main class="view" id="view"></main>
+    </div>
+    <div class="quiz" id="quiz" hidden></div>
+    <script src="app.js"></script>
+  </body>
+</html>

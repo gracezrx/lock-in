@@ -1,0 +1,8 @@
+{
+  "name": "lock-in",
+  "productName": "Lock In",
+  "version": "0.2.0",
+  "type": "module",
+  "main": "main.mjs",
+  "private": true
+}

@@ -1,0 +1,32 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta http-equiv="Content-Security-Policy" content="default-src 'self'; style-src 'self' 'unsafe-inline'; font-src 'self'; script-src 'self'" />
+    <title>Lock In</title>
+    <link rel="stylesheet" href="base.css" />
+    <link rel="stylesheet" href="overlay.css" />
+  </head>
+  <body>
+    <div class="scrim"></div>
+    <section class="card" id="card" role="alertdialog" aria-modal="true" aria-labelledby="line" aria-describedby="meta">
+      <header class="card-head">
+        <span class="card-name" id="cardName">Yellow card</span>
+        <span class="card-meta" id="meta"></span>
+      </header>
+      <h1 class="line" id="line"></h1>
+      <p class="goal" id="goal"></p>
+      <div class="options" id="options"></div>
+      <div class="answer">
+        <button class="mic" id="mic" type="button" aria-label="Answer out loud">
+          <span class="mic-dot"></span><span id="micLabel">Answer out loud</span>
+        </button>
+        <form id="replyForm" class="reply">
+          <input id="reply" type="text" placeholder="Or type your answer" autocomplete="off" aria-label="Type your answer" />
+        </form>
+      </div>
+      <p class="status" id="status" aria-live="polite"></p>
+    </section>
+    <script src="overlay.js"></script>
+  </body>
+</html>

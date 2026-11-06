@@ -1,0 +1,264 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <title>Her Mac</title>
+    <link rel="stylesheet" href="/dist/renderer/base.css" />
+    <style>
+      *, *::before, *::after { animation: none !important; transition: none !important; }
+      html, body { width: 1280px; height: 800px; overflow: hidden; }
+      body { position: relative; background: linear-gradient(160deg, #c9d3cc 0%, #9fb0aa 55%, #7f938f 100%); font-family: var(--body); }
+
+      .menubar { position: absolute; inset: 0 0 auto 0; height: 28px; display: flex; align-items: center; gap: 18px; padding: 0 16px; background: rgba(255, 255, 255, 0.6); font-size: 13px; font-weight: 600; color: var(--ink); z-index: 5; }
+      .menubar .left { display: flex; gap: 18px; }
+      .menubar .left span:first-child { font-weight: 800; }
+      .menubar .right { margin-left: auto; display: flex; align-items: center; gap: 16px; }
+      .lockin-item { display: flex; align-items: center; gap: 6px; padding: 2px 8px; border-radius: 5px; font-variant-numeric: tabular-nums; }
+      .lockin-item svg { width: 15px; height: 15px; }
+      .lockin-item .dot { width: 9px; height: 9px; border-radius: 50%; background: #2bb24c; }
+      .lockin-item.idle .dot, .lockin-item.idle .time { display: none; }
+
+      .browser { position: absolute; left: 64px; top: 50px; width: 1152px; height: 712px; border-radius: 12px; overflow: hidden; background: #fff; box-shadow: 0 0 0 1px rgba(16, 24, 32, 0.18), 0 30px 70px rgba(16, 24, 32, 0.35); }
+      .tabs { height: 40px; display: flex; align-items: flex-end; gap: 2px; padding: 0 10px 0 82px; background: #dde2e5; position: relative; }
+      .lights { position: absolute; left: 16px; top: 14px; display: flex; gap: 8px; }
+      .lights i { width: 12px; height: 12px; border-radius: 50%; background: #ff5f57; }
+      .lights i:nth-child(2) { background: #febc2e; }
+      .lights i:nth-child(3) { background: #28c840; }
+      .tab { display: flex; align-items: center; gap: 8px; width: 230px; height: 32px; padding: 0 12px; border-radius: 9px 9px 0 0; font-size: 12.5px; font-weight: 500; color: var(--ink-2); white-space: nowrap; overflow: hidden; }
+      .tab.on { background: #fff; color: var(--ink); }
+      .tab .fav { flex: none; width: 14px; height: 14px; border-radius: 3px; }
+      .toolbar { height: 44px; display: flex; align-items: center; gap: 14px; padding: 0 14px; border-bottom: 1px solid #e3e5e0; }
+      .toolbar .nav { display: flex; gap: 14px; color: var(--ink-3); font-size: 16px; }
+      .omnibox { flex: 1; height: 30px; display: flex; align-items: center; padding: 0 14px; border-radius: 15px; background: #eef0f2; font-size: 14px; color: var(--ink); }
+      .viewport { position: absolute; inset: 84px 0 0 0; overflow: hidden; }
+      .page { position: absolute; inset: 0; }
+
+      /* A made-up short-video site. */
+      .feed { background: #000; color: #fff; }
+      .side { position: absolute; left: 0; top: 0; bottom: 0; width: 214px; padding: 26px 0 0 22px; border-right: 1px solid #262626; display: grid; align-content: start; gap: 6px; font-size: 15px; color: #f5f5f5; }
+      .side .logo { font-family: var(--display); font-weight: 900; font-size: 30px; letter-spacing: 0.01em; margin: 0 0 18px 6px; }
+      .side .item { position: relative; display: flex; align-items: center; gap: 14px; padding: 9px 8px; border-radius: 8px; }
+      .side .item svg { width: 24px; height: 24px; fill: none; stroke: #fff; stroke-width: 1.8; stroke-linecap: round; stroke-linejoin: round; }
+      .side .item.on { font-weight: 700; }
+      .side .item.on svg { stroke-width: 2.6; }
+      .side .badge { position: absolute; left: 24px; top: 4px; min-width: 18px; height: 18px; padding: 0 5px; border-radius: 9px; background: #ff3040; font-size: 11px; font-weight: 700; line-height: 18px; text-align: center; }
+      .side .me { width: 24px; height: 24px; border-radius: 50%; background: linear-gradient(135deg, #f4a261, #e76f51); }
+
+      .reels { position: absolute; left: 408px; top: 15px; width: 420px; }
+      .reel { position: absolute; left: 0; width: 420px; height: 598px; }
+      .video { position: absolute; left: 0; top: 0; width: 336px; height: 598px; overflow: hidden; border-radius: 8px; background: #000; }
+      .video img { position: absolute; display: block; }
+      .video .fill { inset: 0; width: 100%; height: 100%; object-fit: cover; }
+      .video .bg { inset: -30px; width: calc(100% + 60px); height: calc(100% + 60px); object-fit: cover; filter: blur(18px) brightness(0.5) saturate(1.2); }
+      .video .mid { left: 0; width: 100%; }
+      .meme { position: absolute; left: 0; right: 0; }
+      .meme .top { padding: 12px 14px 13px; background: #fff; color: #111; font: 600 16.5px/1.32 var(--body); }
+      .meme img { position: static; width: 100%; }
+      .cap { position: absolute; left: 18px; right: 18px; text-align: center; font: 800 21px/1.25 var(--body); letter-spacing: -0.01em; }
+      .cap.outline { color: #fff; -webkit-text-stroke: 4px #000; paint-order: stroke fill; }
+      .cap.box span { background: #fff; color: #000; padding: 2px 8px; border-radius: 6px; -webkit-box-decoration-break: clone; box-decoration-break: clone; line-height: 1.55; font-weight: 700; font-size: 18px; }
+      .grad { position: absolute; left: 0; right: 0; bottom: 0; height: 190px; background: linear-gradient(transparent, rgba(0, 0, 0, 0.62)); }
+      .mute { position: absolute; right: 12px; top: 12px; width: 28px; height: 28px; border-radius: 50%; background: rgba(38, 38, 38, 0.75); display: grid; place-items: center; }
+      .mute svg { width: 14px; height: 14px; fill: #fff; }
+      .meta { position: absolute; left: 14px; right: 14px; bottom: 16px; display: grid; gap: 7px; font-size: 12.5px; }
+      .meta .row { display: flex; align-items: center; gap: 8px; }
+      .meta .av { width: 28px; height: 28px; border-radius: 50%; padding: 2px; background: conic-gradient(#feda75, #fa7e1e, #d62976, #962fbf, #4f5bd5, #feda75); }
+      .meta .av i { display: block; width: 100%; height: 100%; border-radius: 50%; border: 2px solid #000; background-size: cover; background-position: center; }
+      .meta b { font-weight: 700; }
+      .meta .follow { padding: 3px 9px; border: 1px solid rgba(255, 255, 255, 0.85); border-radius: 7px; font-size: 11.5px; font-weight: 700; }
+      .meta .text { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; color: rgba(255, 255, 255, 0.95); }
+      .meta .text em { font-style: normal; color: rgba(255, 255, 255, 0.6); }
+      .meta .audio { display: inline-flex; align-items: center; gap: 6px; justify-self: start; padding: 3px 9px; border-radius: 999px; background: rgba(255, 255, 255, 0.16); font-size: 11.5px; }
+      .bar { position: absolute; left: 0; bottom: 0; height: 2px; background: #fff; }
+      .rail { position: absolute; left: 350px; bottom: 6px; width: 56px; display: grid; justify-items: center; gap: 15px; font-size: 12px; font-weight: 600; }
+      .rail div { display: grid; justify-items: center; gap: 3px; }
+      .rail svg { width: 25px; height: 25px; fill: none; stroke: #fff; stroke-width: 1.9; stroke-linejoin: round; stroke-linecap: round; }
+      .rail .liked svg { fill: #ff3040; stroke: #ff3040; }
+      .rail .thumb { width: 26px; height: 26px; border-radius: 6px; border: 2px solid #fff; background-size: cover; background-position: center; }
+
+      /* The doc she should be writing. */
+      .doc { background: #f6f7f8; display: flex; justify-content: center; padding-top: 26px; }
+      .sheet { width: 760px; height: 700px; background: #fff; box-shadow: 0 0 0 1px #e3e5e0; padding: 54px 72px; color: #1d232a; font-size: 16px; line-height: 1.6; }
+      .sheet h1 { font-family: var(--body); font-weight: 700; font-size: 30px; line-height: 1.2; margin-bottom: 6px; }
+      .sheet .sub { color: var(--ink-3); margin-bottom: 26px; }
+      .sheet h2 { font-size: 18px; font-weight: 700; margin: 18px 0 6px; }
+      .sheet ul { margin: 0; padding-left: 22px; }
+      .caret { display: inline-block; width: 2px; height: 19px; margin-left: 1px; vertical-align: -3px; background: #1d232a; }
+
+      /* Lock In's corner card */
+      .toast { position: absolute; top: 40px; right: 16px; width: 372px; display: flex; overflow: hidden; border-radius: 12px; background: #fff; box-shadow: 0 0 0 1px rgba(16, 24, 32, 0.12), 0 12px 32px rgba(16, 24, 32, 0.28); z-index: 6; }
+      .toast .stripe { flex: 0 0 10px; background: var(--ink); }
+      .toast .content { flex: 1; padding: 14px 16px 16px; }
+      .toast .title { font-family: var(--display); font-weight: 800; font-size: 22px; line-height: 1.1; }
+      .toast .body { margin-top: 4px; font-size: 15px; line-height: 1.4; }
+
+      #cardFrame { position: absolute; inset: 0; width: 1280px; height: 800px; border: 0; z-index: 20; background: transparent; }
+      .cursor { position: absolute; left: 0; top: 0; width: 26px; height: 36px; z-index: 30; filter: drop-shadow(0 1px 1px rgba(0, 0, 0, 0.35)); }
+    </style>
+  </head>
+  <body>
+    <div class="menubar">
+      <div class="left"><span>Browser</span><span>File</span><span>Edit</span><span>View</span><span>History</span><span>Window</span></div>
+      <div class="right">
+        <div class="lockin-item idle" id="tray">
+          <svg viewBox="0 0 1024 1024" aria-hidden="true"><g transform="translate(512 512) scale(1.05) translate(-512 -529)"><path d="M375 526V430a137 137 0 0 1 274 0V526" fill="none" stroke="#101820" stroke-width="80"/><rect x="292" y="486" width="440" height="314" rx="48" fill="#101820"/></g></svg>
+          <i class="dot"></i><span class="time" id="clock">25:00</span>
+        </div>
+        <span>Fri 2:14 PM</span>
+      </div>
+    </div>
+
+    <div class="browser">
+      <div class="tabs">
+        <div class="lights"><i></i><i></i><i></i></div>
+        <div class="tab" id="tabDoc"><span class="fav" style="background:#3b7ddd"></span><span id="docTitle"></span></div>
+        <div class="tab on" id="tabFeed"><span class="fav" style="background:#ff3b5c"></span><span>doomscroll · Reels</span></div>
+      </div>
+      <div class="toolbar">
+        <div class="nav"><span>←</span><span>→</span><span>↻</span></div>
+        <div class="omnibox" id="url"></div>
+      </div>
+      <div class="viewport">
+        <div class="page feed" id="feed">
+          <div class="side"><div class="logo">doomscroll</div><div class="item "><svg viewBox="0 0 24 24"><path d="M4 10.5 12 4l8 6.5V20h-5v-6h-6v6H4z"/></svg><span>Home</span></div><div class="item "><svg viewBox="0 0 24 24"><circle cx="11" cy="11" r="6.5"/><path d="m16 16 4 4"/></svg><span>Search</span></div><div class="item "><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="8.5"/><path d="m15.5 8.5-2 5-5 2 2-5z"/></svg><span>Explore</span></div><div class="item on"><svg viewBox="0 0 24 24"><rect x="3.5" y="3.5" width="17" height="17" rx="4"/><path d="M3.5 8.5h17M9 3.5l2.5 5M14.5 3.5l2.5 5M10 12v5l4.5-2.5z"/></svg><span>Reels</span></div><div class="item "><svg viewBox="0 0 24 24"><path d="M21 3 3 10.5l7 2.5 2.5 7z"/><path d="m10 13 4-4"/></svg><span class="badge">3</span><span>Messages</span></div><div class="item "><svg viewBox="0 0 24 24"><path d="M12 20s-7-4.4-8.8-8.6C1.9 8 3.8 4.6 7.2 4.6c2 0 3.4 1 4.8 2.8 1.4-1.8 2.8-2.8 4.8-2.8 3.4 0 5.3 3.4 4 6.8C19 15.6 12 20 12 20z"/></svg><span>Notifications</span></div><div class="item "><svg viewBox="0 0 24 24"><rect x="3.5" y="3.5" width="17" height="17" rx="4"/><path d="M12 8v8M8 12h8"/></svg><span>Create</span></div><div class="item"><span class="me"></span><span>Profile</span></div></div>
+          <div class="reels" id="reels"></div>
+        </div>
+        <div class="page doc" id="doc">
+          <div class="sheet">
+            <h1 id="docH1"></h1>
+            <div class="sub">Draft · due to investors Monday</div>
+            <h2>Highlights</h2>
+            <ul>
+              <li>Closed 3 design partners; 2 more in legal.</li>
+              <li>Shipped the onboarding rebuild. Activation is up a lot.</li>
+              <li><span id="typed"></span><span class="caret" id="caret"></span></li>
+            </ul>
+            <h2>Asks</h2>
+            <ul><li>Intros to heads of ops at mid-size logistics companies.</li></ul>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div class="toast" id="toast">
+      <div class="stripe"></div>
+      <div class="content"><div class="title">Locked in</div><div class="body" id="toastBody"></div></div>
+    </div>
+
+    <iframe id="cardFrame" src="card.html" title="Bomb card"></iframe>
+    <svg class="cursor" id="cursor" viewBox="0 0 22 30" aria-hidden="true"><path d="M2 2v22l6-6 4 9 4-2-4-9h8z" fill="#fff" stroke="#101820" stroke-width="1.6" stroke-linejoin="round"/></svg>
+
+    <script src="beats.js"></script>
+    <script>
+      const { CAST, B, seg, lerp, ease } = window.LOCKIN_BOMB;
+      const $ = (id) => document.getElementById(id);
+      $('docTitle').textContent = `${CAST.goal} · Docs`;
+      $('docH1').textContent = `${CAST.goal}: October`;
+      $('toastBody').textContent = `${CAST.goal}, 25 minutes. Go.`;
+
+      const { REELS, feed } = window.LOCKIN_BOMB;
+      const GAP = 16;
+      const SVG = {
+        heart: '<path d="M12 20s-7-4.4-8.8-8.6C1.9 8 3.8 4.6 7.2 4.6c2 0 3.4 1 4.8 2.8 1.4-1.8 2.8-2.8 4.8-2.8 3.4 0 5.3 3.4 4 6.8C19 15.6 12 20 12 20z"/>',
+        comment: '<path d="M20.5 11.5a8.5 8.5 0 0 1-12.6 7.4L3.5 20l1.2-4.2A8.5 8.5 0 1 1 20.5 11.5z"/>',
+        share: '<path d="M21 3 3 10.5l7 2.5 2.5 7z"/><path d="m10 13 4-4"/>',
+        save: '<path d="M6 3.5h12v17l-6-4.5-6 4.5z"/>',
+        more: '<circle cx="5" cy="12" r="1.2"/><circle cx="12" cy="12" r="1.2"/><circle cx="19" cy="12" r="1.2"/>',
+      };
+      const esc = (x) => x.replace(/&/g, '&amp;').replace(/</g, '&lt;');
+      for (const [i, r] of REELS.entries()) {
+        const src = `feed/${r.img}.jpg`;
+        const el = document.createElement('div');
+        el.className = 'reel';
+        el.style.top = `${i * (598 + GAP)}px`;
+        let media;
+        if (r.fmt === 'meme') {
+          media = `<div class="meme" style="top:${r.y ?? 150}px"><div class="top">${esc(r.text)}</div><img class="kb" src="${src}" alt="" /></div>`;
+        } else if (r.fmt === 'blur') {
+          media = `<img class="bg" src="${src}" alt="" /><img class="mid kb" src="${src}" alt="" style="top:${r.y ?? 170}px" />`;
+        } else {
+          media = `<img class="fill kb" src="${src}" alt="" />`;
+        }
+        const cap = r.fmt === 'meme' ? '' : `<div class="cap ${r.style}" style="top:${r.capY ?? 96}px"><span>${esc(r.text)}</span></div>`;
+        el.innerHTML = `
+          <div class="video">${media}${cap}<div class="grad"></div>
+            <div class="mute"><svg viewBox="0 0 24 24"><path d="M4 9h4l5-4v14l-5-4H4z"/><path d="M16 9l5 6M21 9l-5 6" stroke="#fff" stroke-width="2"/></svg></div>
+            <div class="meta">
+              <div class="row"><span class="av"><i style="background-image:url(${src})"></i></span><b>${esc(r.who)}</b><span>·</span><span class="follow">Follow</span></div>
+              <div class="text">${esc(r.text)} <em>… more</em></div>
+              <div class="audio">♫ ${esc(r.who)} · Original audio</div>
+            </div>
+            <div class="bar" data-i="${i}"></div>
+          </div>
+          <div class="rail">
+            <div class="${i % 3 === 1 ? 'liked' : ''}"><svg viewBox="0 0 24 24">${SVG.heart}</svg><span>${r.likes}</span></div>
+            <div><svg viewBox="0 0 24 24">${SVG.comment}</svg><span>${r.comments}</span></div>
+            <div><svg viewBox="0 0 24 24">${SVG.share}</svg></div>
+            <div><svg viewBox="0 0 24 24">${SVG.save}</svg></div>
+            <div><svg viewBox="0 0 24 24" style="fill:#fff">${SVG.more}</svg></div>
+            <span class="thumb" style="background-image:url(${src})"></span>
+          </div>`;
+        $('reels').append(el);
+      }
+      // When each reel came on screen, for its slow zoom.
+      const shownAt = (i) => (i === 0 ? -1.5 : B.swipes[i - 1] ?? 99);
+      const TYPE = 'MRR up 18% this month, and our first enterprise pilot starts';
+      const cardWin = () => $('cardFrame').contentWindow;
+
+      window.render = (t) => {
+        cardWin().render?.(t);
+        const working = t >= B.cardOut[0] + 0.06;
+        $('feed').style.display = working ? 'none' : 'flex';
+        $('doc').style.display = working ? 'flex' : 'none';
+        $('tabFeed').style.display = working ? 'none' : 'flex';
+        $('tabDoc').classList.toggle('on', working);
+        $('url').textContent = working ? 'docs.example.com/investor-update' : `${CAST.where}/reels`;
+
+        // Swipe up through the feed, faster and faster; it stops dead when the bomb lands.
+        const f = feed(t);
+        const ft = Math.min(t, B.impact);
+        $('reels').style.transform = `translateY(${-f.pos * (598 + GAP)}px)`;
+        $('reels').style.filter = f.speed > 0.5 ? `blur(${Math.min(6, f.speed * 0.8).toFixed(1)}px)` : 'none';
+        document.querySelectorAll('.reel').forEach((el, i) => {
+          // Each clip plays: a slow push-in and a little handheld drift.
+          const age = Math.max(0, ft - shownAt(i));
+          const z = 1.04 + age * 0.05;
+          const dx = Math.sin(age * 2.1 + i) * 4;
+          const dy = Math.cos(age * 1.7 + i * 2) * 3;
+          el.querySelectorAll('.kb').forEach((img) => (img.style.transform = `translate(${dx}px, ${dy}px) scale(${z.toFixed(4)})`));
+          const bar = el.querySelector('.bar');
+          bar.style.width = `${Math.min(100, age * 9 + (i === 0 ? 30 : 0))}%`;
+        });
+
+        // After the click: the menu bar timer and the corner card.
+        const locked = t >= B.click;
+        $('tray').classList.toggle('idle', !locked);
+        const left = 25 * 60 - Math.max(0, Math.floor(t - B.click + 1));
+        $('clock').textContent = `${Math.floor(left / 60)}:${String(left % 60).padStart(2, '0')}`;
+        const tk = ease.out(seg(t, B.sessionToast, B.sessionToast + 0.26));
+        $('toast').style.opacity = String(tk);
+        $('toast').style.transform = `translateY(${(1 - tk) * -14}px)`;
+
+        const n = Math.round(TYPE.length * seg(t, B.typing[0], B.typing[1]));
+        $('typed').textContent = TYPE.slice(0, n);
+        $('caret').style.opacity = !working || (n < TYPE.length) || Math.floor(t * 2) % 2 === 0 ? '1' : '0';
+
+        // The cursor comes in for the button once the lock is over.
+        const cur = $('cursor');
+        if (t < B.cursorIn[0] || t > B.cardOut[1] + 0.6) {
+          cur.style.display = 'none';
+        } else {
+          cur.style.display = 'block';
+          const r = cardWin().primaryRect?.() ?? { x: 400, y: 600, width: 220, height: 46 };
+          const to = { x: r.x + r.width * 0.42, y: r.y + r.height * 0.55 };
+          const from = { x: 1010, y: 760 };
+          const k = ease.inOut(seg(t, B.cursorIn[0], B.cursorIn[1]));
+          const x = lerp(from.x, to.x, k);
+          const y = lerp(from.y, to.y, k) - Math.sin(k * Math.PI) * 40;
+          const press = t >= B.click && t < B.click + 0.08 ? 0.86 : 1;
+          cur.style.transform = `translate(${x}px, ${y}px) scale(${press})`;
+        }
+      };
+    </script>
+  </body>
+</html>
