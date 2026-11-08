@@ -365,7 +365,7 @@ LOCKIN_SMOKE=1 npm start   # launches, exercises every window, a session, a type
 npm run demo               # re-records docs/demo.gif and docs/demo.mp4 (needs Playwright's Chromium and ffmpeg)
 npm run demo:bomb          # the vertical Lock In bomb clip, docs/bomb-demo.mp4 (try -- --them Maya --pronoun she)
 npm run demo:bomb:wide     # the same clip in landscape for X/Twitter, docs/bomb-demo-wide.mp4
-npm run demo:launch        # the 60-second launch film, docs/launch.mp4 (AI voices) and docs/launch-your-voice.mp4
+npm run demo:launch        # the launch film (about a minute), docs/launch.mp4 (AI voices) and docs/launch-your-voice.mp4
                            # (no narrator); python3 scripts/demo/launch/tts.py re-speaks the lines in film.js
 ```
 

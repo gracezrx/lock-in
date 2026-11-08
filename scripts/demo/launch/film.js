@@ -17,134 +17,218 @@
 
   // ---- What's said, and when (durations come from the voice files; record.mjs fills them in) ----
   const VO = [
-    { id: 'n1', who: 'narrator', at: 0.4, text: 'This is Sam. Sam has an investor update due in three hours.' },
-    { id: 's1', who: 'sam', at: 4.25, text: 'Just one video.' },
-    { id: 'n2', who: 'narrator', at: 6.7, text: 'That was a hundred and eighty videos ago.' },
-    { id: 'n3', who: 'narrator', at: 10.4, text: 'Luckily, Sam has Lock In. It lives in his menu bar, and it notices when he drifts.' },
-    { id: 'c1', who: 'coach', at: 15.9, text: 'Sam. It’s been twenty-two minutes. The investor update is not going to write itself.' },
-    { id: 'c2', who: 'coach', at: 21.7, text: 'Right. This is an intervention.' },
-    { id: 'n4', who: 'narrator', at: 24.35, text: 'First it nudges. Then it talks. Then it yells.' },
-    { id: 'n5', who: 'narrator', at: 27.15, text: 'And if Sam still won’t lock in, his friends can help.' },
-    { id: 'n6', who: 'narrator', at: 32.75, text: 'One bomb locks every distraction on his Mac. For five whole minutes.' },
-    { id: 's2', who: 'sam', at: 38.6, text: 'Ugh. Fine.' },
-    { id: 'n7', who: 'narrator', at: 41.7, text: 'Lock In knows your goals and today’s to-dos, stays quiet in your meetings, and sets up in a minute.' },
-    { id: 'n8', who: 'narrator', at: 50.0, text: 'Lock In. Free for Mac. Go bomb a friend.' },
-    { id: 'c3', who: 'coach', at: 57.0, text: 'Don’t even think about it.' },
+    { id: 'n1', who: 'narrator', at: 1.5, text: 'Yep. That’s Sam. You’re probably wondering how he got here.' },
+    { id: 'n2', who: 'narrator', at: 5.85, text: 'Sam has an investor update due in three hours.' },
+    { id: 's1', who: 'sam', at: 8.55, text: 'Just one video.' },
+    { id: 'n3', who: 'narrator', at: 9.7, text: 'Two hundred and thirteen videos later, Sam is an expert on raccoons.' },
+    { id: 'n4', who: 'narrator', at: 14.15, text: 'Luckily, Sam has Lock In. It lives in his menu bar. It sees everything.' },
+    { id: 'c1', who: 'coach', at: 21.2, text: 'Sam. You’ve watched a raccoon steal snacks four times. It’s the same raccoon. Your investor update is still blank.' },
+    { id: 's2', who: 'sam', at: 28.85, text: 'It’s research.' },
+    { id: 'c2', who: 'coach', at: 30.0, text: 'Right. Intervention.' },
+    { id: 'n5', who: 'narrator', at: 32.9, text: 'And if Sam still won’t lock in, his friends get a button.' },
+    { id: 'n6', who: 'narrator', at: 36.85, text: 'One bomb. Every distraction on his Mac. Locked for five minutes.' },
+    { id: 's3', who: 'sam', at: 45.7, text: 'This is a hostage situation.' },
+    { id: 'n7', who: 'narrator', at: 47.75, text: 'It is.' },
+    { id: 'n8', who: 'narrator', at: 50.7, text: 'It also knows your goals, your to-dos and your calendar, so it never roasts you on a Zoom.' },
+    { id: 'n9', who: 'narrator', at: 57.35, text: 'Lock In. Free for Mac. Go bomb a friend.' },
+    { id: 'c3', who: 'coach', at: 63.6, text: 'Sam.' },
+    { id: 's4', who: 'sam', at: 64.45, text: 'I was just closing it.' },
   ];
-  const DUR = { n1: 3.58, s1: 1.0, n2: 1.72, n3: 5.02, c1: 5.43, c2: 2.26, n4: 2.65, n5: 2.68, n6: 3.93, s2: 0.76, n7: 5.4, n8: 2.39, c3: 1.6 };
+  const DUR = { n1: 3.06, n2: 2.56, s1: 1.0, n3: 3.86, n4: 4.48, c1: 7.54, s2: 0.88, c2: 1.48, n5: 2.9, n6: 3.93, s3: 1.57, n7: 0.66, n8: 4.71, n9: 2.39, c3: 0.75, s4: 1.17 };
+  const at = (id) => VO.find((v) => v.id === id).at;
+  // The subtitles: each line in pieces, with when each piece starts (from the pauses in the voice files).
+  const SUBS = {
+    n1: [[0, 'Yep. That’s Sam.'], [1.24, 'You’re probably wondering how he got here.']],
+    n3: [[0, 'Two hundred and thirteen videos later,'], [1.95, 'Sam is an expert on raccoons.']],
+    n4: [[0, 'Luckily, Sam has Lock In.'], [1.88, 'It lives in his menu bar.'], [3.41, 'It sees everything.']],
+    c1: [[0, 'Sam. You’ve watched a raccoon steal snacks four times.'], [3.77, 'It’s the same raccoon.'], [5.4, 'Your investor update is still blank.']],
+    n5: [[0, 'And if Sam still won’t lock in,'], [1.79, 'his friends get a button.']],
+    n6: [[0, 'One bomb. Every distraction on his Mac.'], [2.54, 'Locked for five minutes.']],
+    n8: [[0, 'It also knows your goals,'], [1.49, 'your to-dos and your calendar,'], [3.16, 'so it never roasts you on a Zoom.']],
+    n9: [[0, 'Lock In. Free for Mac.'], [1.43, 'Go bomb a friend.']],
+  };
+
+  // ---- The beats ----
+  const T = {
+    freeze: 1.3, // record scratch: "Yep. That's Sam."
+    rew: [4.55, 5.35], // ◀◀ back to 47 minutes earlier
+    play: 5.35,
+    scroll: [9.6, 11.75], // "just one video", then 213
+    push1: [11.6, 12.2], // into his laptop
+    back: [12.45, 12.95], // he scrolls all the way back up to the raccoon
+    loop: 4.0, // the raccoon video, on repeat
+    glow: 15.0, // the padlock in the menu bar lights up
+    drift: 16.1,
+    sting: [17.6, 17.85, 18.1], // dun, dun, DUN: "It sees everything."
+    stingOut: [18.9, 19.3],
+    toast: 19.1, // it nudges…
+    flick: [19.7, 20.4],
+    click: 20.45, // …he closes it
+    research: [28.8, 29.95], // "It's research."
+    slam: 30.5, // "Intervention."
+    out1: [32.45, 32.95],
+    whip: 35.75, // to Grace's phone (the bomb clip's 2.45 s)
+    push2: [39.65, 40.25],
+    free: 48.45, // the red card goes, the doc is back
+    pull: [48.7, 49.3],
+    feats: [50.35, 57.15],
+    end: [56.85, 62.1],
+    later: 61.9, // five minutes later…
+    boom: 65.65,
+    outro: 66.0,
+  };
+  const LENGTH = 67.8;
 
   // ---- The big words on top ----
   const CAPS = [
-    [0.3, 1.95, 'This is <y>Sam.</y>'],
-    [1.95, 4.15, 'Investor update due in <y>3 hours</y>'],
-    [4.15, 5.6, '“Just <y>one</y> video.”'],
-    [6.55, 10.0, '<y>180 videos</y> later'],
-    [10.45, 15.1, 'Lock In <y>notices.</y>'],
-    [15.12, 15.9, 'Sam <y>ignores it.</y>'],
-    [15.92, 22.55, 'So it <y>talks.</y>'],
-    [22.6, 24.3, 'Then it <y>yells.</y>'],
-    [27.05, 28.75, '<y>Still</y> scrolling?'],
-    [28.75, 29.45, 'Call <y>a friend.</y>'],
-    [29.45, 32.15, 'Grace throws a <y>Lock In bomb</y>'],
-    [32.2, 34.4, 'Screen locked. <y>No escape.</y>'],
-    [34.45, 38.55, 'Every distraction. <y>5 minutes.</y>'],
-    [38.55, 39.6, '“Ugh. <y>Fine.</y>”'],
-    [39.65, 41.4, '…and he’s <y>locked in.</y>'],
-    [41.45, 43.9, 'Your <y>goals</y> & <y>to-dos</y>'],
-    [43.9, 45.7, '<y>Quiet</y> in meetings'],
-    [45.7, 47.3, 'Set up in <y>a minute</y>'],
-    [47.3, 49.6, 'Friends can <y>bomb you</y>'],
-    [56.05, 57.0, '<y>Five minutes</y> later…'],
+    [1.45, 4.5, 'Yep. That’s <y>Sam.</y>'],
+    [5.4, 7.05, '<y>47 minutes</y> earlier'],
+    [7.05, 8.5, 'Investor update due in <y>3 hours</y>'],
+    [8.5, 9.65, '“Just <y>one</y> video.”'],
+    [9.7, 11.6, '<y>213 videos</y> later'],
+    [12.9, 14.15, 'Certified <y>raccoon expert</y>'],
+    [17.6, 19.05, 'It sees <y>everything.</y>'],
+    [19.15, 20.45, 'First it <y>nudges.</y>'],
+    [20.5, 21.25, 'Sam <y>ignores it.</y>'],
+    [21.3, 24.9, 'So it <y>talks.</y>'],
+    [24.95, 26.55, 'It’s the <y>same raccoon.</y>'],
+    [26.6, 28.75, 'Investor update: <y>blank.</y>'],
+    [28.8, 29.95, '“It’s <y>research.</y>”'],
+    [30.5, 32.45, 'Then it <y>yells.</y>'],
+    [32.5, 34.6, '<y>Still</y> scrolling?'],
+    [34.65, 36.05, 'Friends get <y>a button.</y>'],
+    [36.1, 38.45, 'Grace throws a <y>Lock In bomb</y>'],
+    [38.5, 40.05, 'Screen locked. <y>No escape.</y>'],
+    [40.1, 42.6, 'Every distraction. <y>5 minutes.</y>'],
+    [44.45, 45.65, 'He tried to <y>google it.</y>'],
+    [45.7, 47.55, '“A <y>hostage situation.</y>”'],
+    [47.7, 48.6, '<y>It is.</y>'],
+    [48.8, 50.4, '…and he’s <y>locked in.</y>'],
+    [50.5, 53.85, 'Your <y>goals</y> & <y>to-dos</y>'],
+    [53.85, 55.65, 'Never roasts you <y>on a Zoom</y>'],
+    [55.65, 56.95, 'Set up in <y>a minute</y>'],
+    [62.1, 63.1, '<y>Five minutes</y> later…'],
   ];
 
-  // ---- Scenes ----
-  const S = {
-    wide: [[0, 10.0], [27.0, 34.4], [39.6, 41.4]],
-    close: [[10.0, 24.3], [34.4, 39.6], [56.0, 59.25]],
-    recap: [[24.3, 27.0]],
-    feats: [[41.4, 49.6]],
-    end: [[49.6, 56.0]],
-    outro: [[59.6, 60.6]],
+  // ---- Scenes (each layer's time on screen; the edges overlap so one shot flows into the next) ----
+  const ON = {
+    wide: [[0, T.push1[1]], [T.out1[0], T.push2[1]], [T.pull[0], 50.85]],
+    close: [[T.push1[0], T.out1[1]], [T.push2[0], T.pull[1]], [T.later, 65.8]],
+    feats: [T.feats],
+    end: [T.end],
+    outro: [[T.outro, LENGTH]],
   };
-  const LENGTH = 60.6;
-  const inScene = (name, t) => S[name].find(([a, b]) => t >= a && t < b);
+  const S = ON;
+  // The camera pushes into Sam's laptop screen (1) and pulls back out of it (-1).
+  const PUSH = [{ a: T.push1[0], b: T.push1[1], dir: 1 }, { a: T.push2[0], b: T.push2[1], dir: 1 }, { a: T.pull[0], b: T.pull[1], dir: -1 }];
+  const CLOSE = { x: 243, y: 150, w: 1433.6, h: 896 };
 
   // The bomb clip's own clock, for each moment it's on screen.
   function bombTime(t) {
-    if (t < 5.5) return 0.28 * (t / 5.5);
-    if (t < 12) return 0.3 + 1.95 * Math.pow(Math.min(1, (t - 5.5) / 4.5), 1.6);
-    if (t < 29.4) return 1.7 + (t - 27) * 0.27;
-    if (t < 37) return 2.45 + (t - 29.4);
-    return 8.05 + (t - 39.6);
+    if (t < T.freeze) return 1.0 + t; // the feed flying by
+    if (t < T.rew[0]) return 2.3; // frozen
+    if (t < T.rew[1]) return 2.3 - 2.28 * ease.inOut(seg(t, T.rew[0], T.rew[1])); // rewinding
+    if (t < T.scroll[0]) return 0.02 + 0.27 * seg(t, T.play, T.scroll[0]); // the first video
+    if (t < T.scroll[1]) return 0.3 + 1.98 * Math.pow(seg(t, T.scroll[0], T.scroll[1]), 1.25); // and the rest
+    if (t < 20) return 2.28 + 0.1 * seg(t, T.scroll[1], T.push1[1]);
+    if (t < T.whip) return 1.7 + 0.75 * seg(t, T.out1[0], T.whip); // still scrolling
+    if (t < 45) return 2.45 + (t - T.whip); // the bomb
+    return Math.min(9.85, 8.12 + Math.max(0, t - T.pull[0])); // typing
   }
   // Sam's Mac, up close.
   function macTime(t) {
-    if (t < 22.6) return 0.3 + (t - 10) * 0.09;
-    if (t < 24.3) return 0.3 + 12.6 * 0.09;
-    if (t < 39.3) return 1.0;
-    if (t < 55) return 8.45 + (t - 39.3);
+    if (t < 35) return 2.3; // the feed (the film scrolls it from here)
+    if (t < T.free) return 1.04; // under the red card
+    if (t < 60) return Math.max(8.12, 8.12 + (t - T.pull[0])); // the doc, typing
     return 9.85;
   }
 
-  // The lockout: he tries everything.
+  // The lockout: he tries everything, then tries to google his way out.
   const TRIES = [
-    { at: 34.5, url: 'youtube.com', hit: 35.0, left: '4:52' },
-    { at: 35.55, url: 'x.com', hit: 35.85, left: '4:51' },
-    { at: 36.45, url: 'reddit.com', hit: 36.8, left: '4:50' },
-    { at: 37.3, url: 'instagram.com', hit: 37.58, left: '4:49' },
+    { at: 40.35, url: 'youtube.com', hit: 40.8, left: '4:52' },
+    { at: 41.2, url: 'x.com', hit: 41.48, left: '4:51' },
+    { at: 41.85, url: 'reddit.com', hit: 42.17, left: '4:50' },
+    { at: 42.75, url: 'how to get around lock in', hit: 44.4, left: '4:47', pause: [0.62, 1.0], h1: 'Nice try.', msg: 'Googling how to get around Lock In is also a distraction. 4:47 left.' },
   ];
+  /** How much of a try's address he has typed (0..1); the sneaky one stops halfway to think. */
+  function typed(x, t) {
+    const end = x.hit - 0.08;
+    if (!x.pause) return seg(t, x.at, end);
+    const [p0, p1] = x.pause.map((o) => x.at + o);
+    return t < p0 ? 0.5 * seg(t, x.at, p0) : 0.5 + 0.5 * seg(t, p1, end);
+  }
 
-  // Sound cues for record.mjs (the voice, the bomb clip's own sound and the music are separate).
-  const SFX = [
-    { at: 4.85, kind: 'click' },
-    { at: 9.95, kind: 'whoosh' },
-    { at: 11.85, kind: 'blip' },
-    { at: 12.8, kind: 'toast' },
-    { at: 15.05, kind: 'click' },
-    { at: 15.12, kind: 'swish' },
-    { at: 22.6, kind: 'slam' },
-    { at: 24.28, kind: 'whoosh' },
-    { at: 24.75, kind: 'pluck', n: 0 },
-    { at: 25.6, kind: 'pluck', n: 1 },
-    { at: 26.45, kind: 'pluck', n: 2 },
-    { at: 26.98, kind: 'whoosh' },
-    { at: 34.38, kind: 'whoosh' },
-    ...TRIES.flatMap((x) => [{ at: x.at, kind: 'type', until: x.hit - 0.08 }, { at: x.hit, kind: 'denied' }]),
-    { at: 39.58, kind: 'whoosh' },
-    { at: 41.38, kind: 'whoosh' },
-    { at: 43.88, kind: 'whoosh' },
-    { at: 45.68, kind: 'whoosh' },
-    { at: 47.28, kind: 'whoosh' },
-    { at: 49.6, kind: 'chime' },
-    { at: 51.7, kind: 'fuse', until: 56.0 },
-    { at: 55.95, kind: 'whoosh' },
-    { at: 58.65, kind: 'whistle', until: 59.2 },
-    { at: 59.2, kind: 'boom' },
-  ];
-  // The bomb clip's soundtrack: [film time, clip time, length].
-  const BOMB_AUDIO = [[29.4, 2.45, 5.0], [39.6, 8.05, 1.8]];
-  // Music: in at 0.3, out under the bomb (its own sound plays), back for the lockout, off at the
-  // card slam and the stinger's boom.
-  const MUSIC = { start: 0.3, end: 59.2, duck: [[22.55, 24.3, 0.35], [29.4, 34.4, 0.25], [59.2, 61, 0]] };
-
-  window.FILM = { VO, DUR, CAPS, S, LENGTH, SFX, BOMB_AUDIO, MUSIC, TRIES };
-
-  /** A line in subtitle-sized pieces: split after sentences and commas, joined up to ~46 characters. */
-  function phrases(text) {
-    const bits = text.split(/(?<=[.,!?…])\s+/);
+  // Each swipe of the feed, in film time (for a little flick of sound).
+  function swipeTimes() {
+    const B = window.LOCKIN_BOMB_B ?? [0.3, 0.72, 1.06, 1.34, 1.56, 1.74, 1.89, 2.02, 2.14];
     const out = [];
-    for (const b of bits) {
-      if (out.length && out[out.length - 1].length + b.length + 1 <= 46) out[out.length - 1] += ` ${b}`;
-      else out.push(b);
+    let prev = bombTime(0);
+    for (let t = 1 / 240; t < T.whip; t += 1 / 240) {
+      const visible = t < T.push1[0] || (t >= T.out1[0] && t < T.whip);
+      const bt = bombTime(t);
+      if (visible && bt > prev) for (const s of B) if (prev < s && bt >= s) out.push({ at: +t.toFixed(3), kind: 'flick' });
+      prev = bt;
     }
     return out;
   }
+
+  // Sound cues for record.mjs (the voice, the bomb clip's own sound and the music are separate).
+  const SFX = [
+    ...swipeTimes(),
+    { at: T.freeze, kind: 'scratch' },
+    { at: T.rew[0], kind: 'rewind', until: T.rew[1] },
+    { at: T.play, kind: 'clunk' },
+    { at: 8.95, kind: 'tick' },
+    { at: T.push1[0] - 0.05, kind: 'whoosh' },
+    { at: T.back[0], kind: 'zip', until: T.back[1] },
+    { at: T.glow, kind: 'blip' },
+    { at: T.drift, kind: 'pluck', n: 0 },
+    { at: T.sting[0], kind: 'sting' },
+    { at: T.toast, kind: 'toast' },
+    { at: T.click, kind: 'click' },
+    { at: T.click + 0.05, kind: 'swish' },
+    { at: T.back[1] + 2 * T.loop, kind: 'tick' },
+    { at: T.back[1] + 3 * T.loop, kind: 'tick' },
+    { at: T.research[0], kind: 'swish' },
+    { at: T.slam, kind: 'slam' },
+    { at: T.out1[0] - 0.02, kind: 'whoosh' },
+    { at: T.push2[0] - 0.05, kind: 'whoosh' },
+    ...TRIES.flatMap((x) => {
+      const type = x.pause
+        ? [{ at: x.at, kind: 'type', until: x.at + x.pause[0] }, { at: x.at + x.pause[1], kind: 'type', until: x.hit - 0.08 }]
+        : [{ at: x.at, kind: 'type', until: x.hit - 0.08 }];
+      return [...type, { at: x.hit, kind: 'denied' }, ...(x.h1 ? [{ at: x.hit + 0.12, kind: 'womp' }] : [])];
+    }),
+    { at: T.pull[0] - 0.02, kind: 'whoosh' },
+    { at: T.feats[0] - 0.02, kind: 'whoosh' },
+    { at: 53.78, kind: 'whoosh' },
+    { at: 55.58, kind: 'whoosh' },
+    { at: T.end[0], kind: 'chime' },
+    { at: 59.2, kind: 'fuse', until: T.later + 0.2 },
+    { at: T.later + 0.05, kind: 'whoosh' },
+    { at: 65.2, kind: 'whistle', until: T.boom },
+    { at: T.boom, kind: 'boom' },
+  ].sort((a, b) => a.at - b.at);
+  // The bomb clip's soundtrack: [film time, clip time, length].
+  const BOMB_AUDIO = [[T.whip, 2.45, 4.55], [T.pull[0], 8.12, 1.7]];
+  // Music: loud for the opening scroll, dead at the record scratch, back on PLAY; it stops for the
+  // card slam and for "It is.", ducks under the dramatic sting, the bomb and the sad trombone.
+  const MUSIC = {
+    start: 0,
+    end: T.boom,
+    levels: [[0, 0.95], [T.play, 0.5], [T.scroll[0], 1], [T.push1[1], 0.55], [T.slam, 0.85], [T.pull[0], 1], [T.later, 0.45]],
+    busy: [[0, T.freeze], [T.scroll[0], T.later]],
+    cuts: [[T.freeze, T.play, 0.6], [T.slam, T.slam + 0.7, 0.45], [47.2, 48.45, 0.35]],
+    duck: [[T.sting[0] - 0.05, T.stingOut[1], 0.25], [T.whip, T.push2[1], 0.3], [44.4, 45.9, 0.3]],
+  };
+
+  window.FILM = { VO, DUR, CAPS, S, LENGTH, SFX, BOMB_AUDIO, MUSIC, TRIES, T };
 
   // ---- Drawing ----
   const bombWin = () => $('bomb').contentWindow;
   const macWin = () => $('mac').contentWindow;
   const coachWin = () => $('coach').contentWindow;
-  const SHOWN = { recap: 'flex', end: 'flex', outro: 'grid' };
+  const SHOWN = { end: 'flex', outro: 'grid' };
   const show = (id, on) => {
     $(id).style.display = on ? SHOWN[id] ?? 'block' : 'none';
     $(id).style.visibility = 'visible';
@@ -182,30 +266,21 @@
     $('kIn').setAttribute('points', pts(380, 230, 14));
   }
 
-  // ---- Layers, and the camera moves between them ----
-  // Each layer's time on screen; the edges overlap so one shot flows into the next.
-  const ON = {
-    wide: [[0, 10.35], [26.75, 34.7], [39.55, 41.7]],
-    close: [[9.75, 24.55], [34.1, 40.15], [55.8, 59.4]],
-    recap: [[24.05, 27.2]],
-    feats: [[41.2, 49.9]],
-    end: [[49.35, 56.1]],
-    outro: [[59.5, 60.6]],
-  };
-  // The camera pushes into Sam's laptop screen (1) and pulls back out of it (-1).
-  const PUSH = [{ a: 9.75, b: 10.35, dir: 1 }, { a: 34.1, b: 34.7, dir: 1 }, { a: 39.55, b: 40.15, dir: -1 }];
-  const CLOSE = { x: 243, y: 150, w: 1433.6, h: 896 };
   const within = (name, t) => ON[name].find(([a, b]) => t >= a && t < b);
   const zoom = (s, cx = 960, cy = 540) => ({ s, x: cx * (1 - s), y: cy * (1 - s) });
-  /** Shows a layer at an opacity, a transform ({s, x, y}, origin top left) and a blur. */
-  function place(id, alpha, m, blur = 0) {
+  /** The transform that puts point P at point Q, scaled by s. */
+  const aim = (P, Q, s) => ({ s, x: Q.x - s * P.x, y: Q.y - s * P.y });
+  const apply = (m, p) => (m ? { x: m.x + m.s * p.x, y: m.y + m.s * p.y } : p);
+  /** Shows a layer at an opacity, a transform ({s, x, y}, origin top left), a blur and other filters. */
+  function place(id, alpha, m, blur = 0, more = '') {
     const el = $(id);
     const on = alpha > 0.002;
     show(id, on);
     if (!on) return;
     el.style.opacity = alpha >= 0.999 ? '1' : alpha.toFixed(3);
     el.style.transform = m ? `translate(${m.x.toFixed(2)}px, ${m.y.toFixed(2)}px) scale(${m.s.toFixed(5)})` : 'none';
-    el.style.filter = blur > 0.05 ? `blur(${blur.toFixed(2)}px)` : 'none';
+    const f = `${blur > 0.05 ? `blur(${blur.toFixed(2)}px) ` : ''}${more}`.trim();
+    el.style.filter = f || 'none';
   }
   /** Where the wide shot's laptop screen is (after the bomb clip has drawn this frame). */
   function laptopRect() {
@@ -217,36 +292,89 @@
     const s = to.w / from.w;
     return { s, x: to.x - s * from.x, y: to.y - s * from.y };
   };
+  /** A point on Sam's screen (the mac page's own pixels) in the film's pixels. */
+  const onScreen = (x, y) => ({ x: CLOSE.x + 1.12 * x, y: CLOSE.y + 1.12 * y });
 
   // Every phrase of every line, with its own start and end (subtitles cross-fade between them).
   function phraseTimes() {
     const out = [];
     for (const v of VO) {
-      const parts = phrases(v.text);
-      const total = parts.reduce((n, p) => n + p.length, 0);
       const dur = window.VO_DUR?.[v.id] ?? DUR[v.id];
-      let acc = 0;
-      parts.forEach((p, i) => {
-        const a = v.at + (acc / total) * dur;
-        acc += p.length;
-        const b = i === parts.length - 1 ? v.at + dur + 0.25 : v.at + (acc / total) * dur;
-        out.push({ key: `${v.id}:${i}`, who: v.who, text: p, a, b, first: i === 0, last: i === parts.length - 1 });
+      const parts = SUBS[v.id] ?? [[0, v.text]];
+      parts.forEach(([o, text], i) => {
+        const last = i === parts.length - 1;
+        const b = last ? v.at + dur + 0.25 : v.at + parts[i + 1][0] - 0.02;
+        out.push({ key: `${v.id}:${i}`, who: v.who, text, a: v.at + o, b, first: i === 0, last });
       });
     }
     return out;
   }
 
+  // ---- The reel counter on Sam's laptop (in the wide shot) ----
+  function sticker(d, t) {
+    const st = d.getElementById('sticker');
+    if (!st) return;
+    let n = null;
+    let pop = 1;
+    if (t >= T.rew[0] && t < T.play) n = Math.round(213 * (1 - ease.inOut(seg(t, T.rew[0], T.rew[1] - 0.08))));
+    else if (t >= T.play && t < T.scroll[0]) {
+      n = t < 8.95 ? 0 : 1; // "Just one video."
+      pop = 1 + 0.25 * Math.max(0, 1 - Math.abs(t - 9.0) / 0.15);
+    } else if (t >= T.scroll[0] && t < T.push1[1]) {
+      n = Math.round(1 + 212 * Math.pow(seg(t, T.scroll[0], T.scroll[1] - 0.15), 1.6));
+      pop = n < 213 ? 1 + 0.05 * Math.abs(Math.sin(t * 40)) : 1;
+    } else if (t >= T.out1[0] && t < T.whip) n = 213 + Math.floor(seg(t, T.out1[0], T.whip) * 9); // still going
+    if (n === null) return;
+    d.getElementById('stNum').textContent = String(n);
+    st.style.opacity = '1';
+    st.style.transform = `rotate(6deg) scale(${pop.toFixed(3)})`;
+  }
+
+  // ---- On Sam's screen up close: the feed, scrolled back up to the raccoon, which plays on repeat ----
+  function rewatch(md, t) {
+    const reels = md.getElementById('reels');
+    const first = md.querySelector('.reel');
+    if (!reels || !first) return;
+    const pos = (x) => 9 * (1 - ease.inOut(seg(x, T.back[0], T.back[1])));
+    const p = pos(t);
+    const speed = Math.abs(p - pos(t - 1 / 60)) * 60;
+    reels.style.transform = `translateY(${(-p * 614).toFixed(2)}px)`;
+    reels.style.filter = speed > 1 ? `blur(${Math.min(10, speed * 0.35).toFixed(1)}px)` : 'none';
+    const age = Math.max(0, t - T.back[1]) % T.loop;
+    for (const img of first.querySelectorAll('.kb')) img.style.transform = `translate(${(Math.sin(age * 2.1) * 4).toFixed(2)}px, ${(Math.cos(age * 1.7) * 3).toFixed(2)}px) scale(${(1.04 + age * 0.05).toFixed(4)})`;
+    const bar = first.querySelector('.bar');
+    if (bar) bar.style.width = `${t < T.back[1] ? 30 : ((age / T.loop) * 100).toFixed(2)}%`;
+    // How many times he's watched it.
+    let badge = md.getElementById('replays');
+    if (!badge) {
+      badge = md.createElement('div');
+      badge.id = 'replays';
+      badge.style.cssText = 'position:absolute;left:18px;top:18px;z-index:5;padding:8px 16px 9px;border-radius:999px;background:rgba(0,0,0,.62);color:#fff;font:800 22px/1 "Public Sans",system-ui,sans-serif;white-space:nowrap;transform-origin:0 50%;box-shadow:0 4px 14px rgba(0,0,0,.35)';
+      first.querySelector('.video')?.append(badge);
+    }
+    const since = t - T.back[1];
+    const n = 2 + Math.floor(Math.max(0, since) / T.loop);
+    const k = since < 0 ? 0 : seg(since % T.loop, 0, 0.3);
+    badge.textContent = `↻ Watched ${n}×`;
+    badge.style.opacity = String(seg(t, T.back[1] + 0.1, T.back[1] + 0.3));
+    badge.style.transform = `scale(${lerp(1.35, 1, ease.backSoft(k)).toFixed(3)})`;
+    badge.style.background = n === 5 && k < 1 ? `rgba(255, 207, 0, ${(1 - k).toFixed(3)})` : 'rgba(0,0,0,.62)';
+    badge.style.color = n === 5 && k < 0.6 ? '#101820' : '#fff';
+  }
+
   window.render = (t) => {
     star();
-    $('fade').style.opacity = String(1 - ease.inOut(seg(t, 0, 0.6)));
+    $('fade').style.opacity = String(1 - ease.inOut(seg(t, 0, 0.25)));
 
     // ---- 1. The wide shot (the bomb clip) ----
     const wide = within('wide', t);
     const push = PUSH.find((p) => t >= p.a && t < p.b);
+    const d = $('bomb').contentDocument;
     let wideRect = null;
     if (wide) {
+      // Laid out before it's drawn and measured (inside a hidden layer, the clip has no size).
+      show('wide', true);
       bombWin().render?.(bombTime(t));
-      const d = $('bomb').contentDocument;
       if (d && !d.getElementById('launchCss')) {
         const st = d.createElement('style');
         st.id = 'launchCss';
@@ -255,27 +383,68 @@
         const tag = d.getElementById('tagPhone');
         if (tag) tag.textContent = 'Grace’s phone';
       }
+      if (d) sticker(d, t);
       wideRect = laptopRect();
     }
     let wideA = wide ? 1 : 0;
     let wideM = null;
     let wideBlur = 0;
-    if (wide && wide[0] === 26.75) {
-      // In from the recap: settles back from a slight zoom.
-      const k = ease.outQuint(seg(t, 26.75, 27.25));
+    let wideMore = '';
+    // The freeze frame: grey, a slow push in on Sam; then the tape rewinds, jittering.
+    let head = null;
+    if (wide && t >= T.freeze && t < T.play + 0.35) {
+      const r = d?.getElementById('samHead')?.getBoundingClientRect();
+      head = r ? { x: r.left + r.width * 0.5, y: r.top + r.height * 0.45, r } : { x: 1100, y: 600 };
+      const kz = ease.inOut(seg(t, T.freeze, T.rew[0])) * (1 - ease.inOut(seg(t, T.rew[0], T.rew[0] + 0.35)));
+      wideM = zoom(1 + 0.12 * kz + 0.03 * (1 - ease.outQuint(seg(t, T.freeze, T.freeze + 0.25))), head.x, head.y);
+      const g = 1 - seg(t, T.play, T.play + 0.3);
+      wideMore = `grayscale(${g.toFixed(3)}) contrast(${(1 + 0.15 * g).toFixed(3)}) brightness(${(1 - 0.06 * g).toFixed(3)})`;
+      if (t >= T.rew[0] && t < T.play) {
+        wideM.x += Math.sin(t * 97) * 7 + (Math.sin(t * 13) > 0.7 ? 14 : 0);
+        wideM.y += Math.cos(t * 71) * 3;
+      }
+    }
+    if (wide === ON.wide[1] && t < T.out1[1]) {
+      // In from the card: settles back from a slight zoom (he's scrolling again).
+      const k = ease.outQuint(seg(t, T.out1[0], T.out1[1]));
       wideA = k;
       wideM = zoom(lerp(1.08, 1, k));
     }
-    if (wide && wide[0] === 39.55 && t >= 41.2) {
+    if (wide === ON.wide[2] && t >= T.feats[0]) {
       // Out to the feature tour: pushes forward and dissolves.
-      const k = ease.inOut(seg(t, 41.2, 41.7));
+      const k = ease.inOut(seg(t, T.feats[0], T.feats[0] + 0.5));
       wideA = 1 - k;
       wideM = zoom(lerp(1, 1.12, k));
       wideBlur = 7 * k;
     }
 
+    // "That's Sam": a label on the frozen frame.
+    const tagA = head ? ease.backSoft(seg(t, at('n1') + 0.42, at('n1') + 0.72)) * (1 - seg(t, T.rew[0], T.rew[0] + 0.15)) : 0;
+    $('samTag').style.display = tagA > 0.01 ? 'block' : 'none';
+    if (tagA > 0.01) {
+      const p = apply(wideM, { x: head.r ? head.r.right : head.x + 120, y: head.r ? head.r.top + head.r.height * 0.2 : head.y - 80 });
+      $('samTag').style.transform = `translate(${(p.x - 10).toFixed(1)}px, ${(p.y - 150).toFixed(1)}px) scale(${clamp(tagA, 0, 1.2).toFixed(3)}) rotate(-4deg)`;
+      $('samTag').style.opacity = String(clamp(tagA * 2));
+    }
+
+    // VHS: ◀◀ while it rewinds, ▶ PLAY after.
+    const vhsA = t >= T.rew[0] && t < T.play + 0.8 ? 1 - seg(t, T.play + 0.5, T.play + 0.8) : 0;
+    $('vhs').style.display = vhsA > 0 ? 'block' : 'none';
+    if (vhsA > 0) {
+      $('vhs').style.opacity = vhsA.toFixed(3);
+      $('vhsLines').style.opacity = String(1 - seg(t, T.play, T.play + 0.3));
+      $('vhsBand').style.transform = `translateY(${(((t * 1.7) % 1) * 1300 - 200).toFixed(1)}px)`;
+      $('vhsOsd').innerHTML = t < T.play ? '◀◀&nbsp;REWIND' : '▶&nbsp;PLAY';
+    }
+
     // ---- 2. Sam's screen, up close ----
     const close = within('close', t);
+    const md = $('mac').contentDocument;
+    if (close) {
+      show('close', true);
+      macWin().render?.(macTime(t));
+      if (close === ON.close[0] && md) rewatch(md, t);
+    }
     let closeA = close ? 1 : 0;
     let closeM = null;
     let closeBlur = 0;
@@ -287,135 +456,150 @@
       wideM = fit(wideRect, R);
       closeM = fit(CLOSE, R);
       closeA = ease.smooth(seg(kk, 0.25, 0.7));
-    } else if (close && close[0] === 9.75 && t >= 24.05) {
-      // Out to the recap: pulls back and softens.
-      const k = ease.inOut(seg(t, 24.05, 24.55));
+    } else if (close === ON.close[0] && t >= T.out1[0]) {
+      // Out after the card: pulls back and softens.
+      const k = ease.inOut(seg(t, T.out1[0], T.out1[1]));
       closeA = 1 - k;
       closeM = zoom(lerp(1, 0.86, k));
       closeBlur = 8 * k;
-    } else if (close && close[0] === 55.8) {
+    } else if (close === ON.close[2]) {
       // Back in after the end card (five minutes later).
-      const k = ease.outQuint(seg(t, 55.95, 56.4));
+      const k = ease.outQuint(seg(t, T.later + 0.15, T.later + 0.6));
       closeA = k;
       closeM = zoom(lerp(1.05, 1, k));
+    } else if (close === ON.close[0] && md && t >= T.sting[0] - 0.01 && t < T.stingOut[1]) {
+      // Dun, dun, DUN: three snap zooms onto the padlock in the menu bar.
+      const r = md.getElementById('tray').getBoundingClientRect();
+      const P = onScreen(r.left + r.width / 2, r.top + r.height / 2);
+      const lvl = T.sting.reduce((a, h) => a + ease.outQuint(seg(t, h, h + 0.09)), 0) / T.sting.length;
+      const k = lvl * (1 - ease.inOut(seg(t, T.stingOut[0], T.stingOut[1])));
+      closeM = aim(P, { x: lerp(P.x, 960, k), y: lerp(P.y, 430, k) }, 1 + 2.3 * k);
+      const jolt = T.sting.reduce((a, h) => a + (t >= h ? Math.max(0, 1 - (t - h) / 0.2) : 0), 0);
+      closeM.x += Math.sin(t * 120) * 12 * jolt;
+      closeM.y += Math.cos(t * 97) * 8 * jolt;
+    } else if (close === ON.close[0] && md && t >= T.research[0] && t < T.research[1] + 0.3) {
+      // "It's research": a punch in on the raccoon.
+      const r = md.querySelector('.reel .video')?.getBoundingClientRect();
+      if (r) {
+        const P = onScreen(r.left + r.width / 2, r.top + r.height * 0.45);
+        const k = ease.outQuint(seg(t, T.research[0], T.research[0] + 0.14)) * (1 - ease.inOut(seg(t, T.research[1], T.research[1] + 0.25)));
+        closeM = aim(P, { x: lerp(P.x, 960, k), y: lerp(P.y, 600, k) }, 1 + 0.7 * k);
+      }
     }
-    place('wide', wideA, wideM, wideBlur);
+    place('wide', wideA, wideM, wideBlur, wideMore);
     place('close', closeA, closeM, closeBlur);
 
     if (close) {
-      macWin().render?.(macTime(t));
-      const md = $('mac').contentDocument;
-
       // The padlock in the menu bar lights up: he's drifting.
       const tray = md?.getElementById('tray')?.getBoundingClientRect();
-      const glowA = seg(t, 11.8, 12.1) * (1 - seg(t, 15.35, 15.7));
-      $('glow').style.opacity = String(glowA * (0.6 + 0.4 * (0.5 - 0.5 * Math.cos((t - 11.8) * 7))));
-      const driftA = ease.outQuint(seg(t, 12.0, 12.35)) * (1 - seg(t, 15.35, 15.7));
-      const tIn = ease.outQuint(seg(t, 12.8, 13.3));
-      const tOut = ease.inOut(seg(t, 15.1, 15.45));
+      const first = close === ON.close[0];
+      const glowA = first ? seg(t, T.glow, T.glow + 0.3) * (1 - seg(t, T.click, T.click + 0.35)) : 0;
+      $('glow').style.opacity = String(glowA * (0.6 + 0.4 * (0.5 - 0.5 * Math.cos((t - T.glow) * 7))));
+      const driftA = first ? ease.outQuint(seg(t, T.drift, T.drift + 0.35)) * (1 - seg(t, T.click, T.click + 0.35)) : 0;
+      const tIn = ease.outQuint(seg(t, T.toast, T.toast + 0.5));
+      const tOut = ease.inOut(seg(t, T.click + 0.05, T.click + 0.4));
       $('drift').style.opacity = String(driftA);
       if (tray) {
         Object.assign($('glow').style, { left: `${tray.left - 14}px`, top: `${tray.top - 6}px`, width: `${tray.width + 28}px`, height: `${tray.height + 12}px` });
-        Object.assign($('drift').style, { left: `${tray.left - 40}px`, top: `${tray.bottom + 10 + 180 * ease.inOut(seg(t, 12.8, 13.25)) * (1 - tOut)}px` });
+        Object.assign($('drift').style, { left: `${tray.left - 40}px`, top: `${tray.bottom + 10 + 180 * ease.inOut(seg(t, T.toast, T.toast + 0.45)) * (1 - tOut)}px` });
       }
 
-      // The corner card slides in, he closes it.
-      $('toast').style.opacity = String(seg(t, 12.8, 13.0) * (1 - seg(t, 15.2, 15.45)));
+      // The corner card slides in (it nudges), he closes it.
+      $('toast').style.opacity = first ? String(seg(t, T.toast, T.toast + 0.2) * (1 - seg(t, T.click + 0.1, T.click + 0.35))) : '0';
       $('toast').style.transform = `translateX(${((1 - tIn) * 440 + tOut * 440).toFixed(2)}px)`;
 
       // Lock In talks (the bars follow the voice).
-      const talkLine = t < 22.6 ? (t < 21.6 ? 'c1' : 'c2') : 'c3';
-      const from = t < 40 ? 15.8 : 56.9;
-      const until = t < 40 ? 22.6 : 58.8;
+      const talkLine = !first ? 'c3' : t < at('c2') - 0.05 ? 'c1' : 'c2';
+      const from = first ? at('c1') - 0.3 : at('c3') - 0.25;
+      const until = first ? T.slam : at('c3') + 0.95;
       const ta = ease.outQuint(seg(t, from, from + 0.4)) * (1 - seg(t, until - 0.05, until + 0.2));
       $('talk').style.opacity = String(ta);
       $('talk').style.transform = `translateY(${((1 - ta) * -14).toFixed(2)}px)`;
       if (ta > 0) bars($('bars'), loud(talkLine, t), t, 0);
 
       // The card slams down (on purpose, not smooth).
-      const ck = t >= 22.6 && t < 24.6 ? t - 22.6 : -1;
+      const ck = first && t >= T.slam ? t - T.slam : -1;
       $('coach').style.visibility = ck >= 0 ? 'visible' : 'hidden';
       coachWin().render?.(ck);
 
-      // The cursor: to the corner card's ×, then (five minutes later) creeping toward the feed's tab.
+      // The cursor: to the corner card's ×; then (five minutes later) creeping toward the feed's tab,
+      // freezing when Lock In says his name, and creeping on.
       const cur = $('cursor');
       let cx = null;
       let cy = null;
       let ca = 0;
       let press = 0;
-      if (t > 13.9 && t < 15.8) {
-        const k2 = ease.inOut(seg(t, 14.1, 15.0));
+      if (first && t > T.flick[0] - 0.2 && t < T.click + 0.6) {
+        const k2 = ease.inOut(seg(t, T.flick[0], T.flick[1]));
         cx = lerp(640, 1232, k2);
         cy = lerp(520, 58, k2);
-        ca = seg(t, 13.9, 14.15) * (1 - seg(t, 15.45, 15.8));
-        press = Math.sin(Math.PI * seg(t, 15.0, 15.16));
+        ca = seg(t, T.flick[0] - 0.2, T.flick[0] + 0.05) * (1 - seg(t, T.click + 0.25, T.click + 0.6));
+        press = Math.sin(Math.PI * seg(t, T.click - 0.05, T.click + 0.11));
       }
-      if (t >= 56.0 && t < 59.3) {
-        const tab = md?.getElementById('tabFeed');
+      const tab = md?.getElementById('tabFeed');
+      if (close === ON.close[2]) {
         if (tab) {
           tab.style.display = 'flex';
           tab.classList.remove('on');
         }
         const r = tab?.getBoundingClientRect();
-        const k3 = ease.inOut(seg(t, 56.3, 58.7));
+        const k3 = 0.7 * ease.inOut(seg(t, T.later + 0.4, at('c3') - 0.05)) + 0.2 * ease.inOut(seg(t, at('s4'), T.boom - 0.15));
         cx = lerp(700, r ? r.left + r.width / 2 : 400, k3);
         cy = lerp(560, r ? r.top + r.height / 2 + 4 : 70, k3);
-        ca = seg(t, 56.1, 56.4);
+        ca = seg(t, T.later + 0.3, T.later + 0.55);
       }
       cur.style.opacity = String(ca);
       if (cx !== null) cur.style.transform = `translate(${cx.toFixed(2)}px, ${cy.toFixed(2)}px) scale(${(1 - 0.14 * press).toFixed(3)})`;
 
-      // The lockout: every site he tries is locked; then he gives up and the doc comes back.
-      const gag = t >= 34.1 && t < 39.55;
-      const feed = md?.getElementById('feed')?.getBoundingClientRect();
+      // The lockout: every site he tries is locked, and so is googling his way out.
+      const gag = close === ON.close[1];
       const bl = $('blocked');
-      const blA = t >= TRIES[0].hit ? 1 - ease.inOut(seg(t, 39.25, 39.55)) : 0;
-      bl.style.display = gag && blA > 0 ? 'grid' : 'none';
+      const blA = gag && t >= TRIES[0].hit ? 1 - ease.inOut(seg(t, T.free, T.free + 0.3)) : 0;
+      bl.style.display = blA > 0 ? 'grid' : 'none';
       bl.style.opacity = String(blA);
+      const feed = md?.getElementById('feed')?.getBoundingClientRect();
       if (feed) Object.assign(bl.style, { left: `${feed.left}px`, top: `${feed.top}px`, width: `${feed.width}px`, height: `${feed.height}px` });
-      if (gag && md && t < 39.3) {
-        const cur2 = [...TRIES].reverse().find((x) => t >= x.at);
+      if (gag && md && t < T.free) {
+        const x = [...TRIES].reverse().find((y) => t >= y.at);
         const url = md.getElementById('url');
-        if (cur2 && url) {
-          const n = Math.round(cur2.url.length * seg(t, cur2.at, cur2.hit - 0.08));
-          url.textContent = t < cur2.hit ? cur2.url.slice(0, n) + (Math.floor(t * 6) % 2 ? '|' : '') : `${cur2.url}`;
+        if (x && url) {
+          const n = Math.round(x.url.length * typed(x, t));
+          url.textContent = t < x.hit ? x.url.slice(0, n) + (Math.floor(t * 6) % 2 ? '|' : '') : x.url;
+        }
+        // The sneaky one gets a search box, big enough to read.
+        const sb = $('search');
+        const sA = x?.pause ? ease.outQuint(seg(t, x.at - 0.05, x.at + 0.2)) * (1 - seg(t, x.hit + 0.05, x.hit + 0.3)) : 0;
+        sb.style.display = sA > 0.01 ? 'flex' : 'none';
+        if (sA > 0.01) {
+          sb.style.opacity = sA.toFixed(3);
+          sb.style.transform = `translateY(-50%) scale(${lerp(0.92, 1, sA).toFixed(4)})`;
+          $('sq').textContent = x.url.slice(0, Math.round(x.url.length * typed(x, t)));
+          $('sqCaret').style.opacity = t < x.hit && Math.floor(t * 4) % 2 === 0 ? '1' : t < x.hit ? '0' : '0';
         }
         const card = bl.querySelector('.bc');
-        const hit = cur2 && t >= cur2.hit;
+        const hit = x && t >= x.hit;
         card.style.visibility = hit ? 'visible' : 'hidden';
         if (hit) {
-          const k4 = ease.backSoft(seg(t, cur2.hit, cur2.hit + 0.3));
-          card.style.transform = `scale(${lerp(1.25, 1, k4).toFixed(4)}) rotate(${lerp(-6, 2, k4).toFixed(3)}deg)`;
-          card.style.opacity = String(seg(t, cur2.hit, cur2.hit + 0.06));
-          $('bMsg').textContent = `${cur2.url} is locked for ${cur2.left}. Every distraction is. Back to work.`;
+          const big = x.h1 ? 1.4 : 1.25;
+          const k4 = ease.backSoft(seg(t, x.hit, x.hit + (x.h1 ? 0.4 : 0.3)));
+          card.style.transform = `scale(${lerp(big, 1, k4).toFixed(4)}) rotate(${lerp(x.h1 ? 8 : -6, x.h1 ? -2 : 2, k4).toFixed(3)}deg)`;
+          card.style.opacity = String(seg(t, x.hit, x.hit + 0.06));
+          $('bH1').textContent = x.h1 ?? 'Locked.';
+          $('bMsg').textContent = x.msg ?? `${x.url} is locked for ${x.left}. Every distraction is. Back to work.`;
         }
       }
-      $('poof').style.display = 'none';
+      const badge = md?.getElementById('replays');
+      if (badge && !first) badge.style.opacity = '0';
     }
 
-    // ---- 3. The recap: nudge, talk, yell ----
-    const recap = within('recap', t);
-    if (recap) {
-      const kin = ease.outQuint(seg(t, 24.05, 24.6));
-      const kout = ease.inOut(seg(t, 26.75, 27.2));
-      place('recap', kin * (1 - kout), zoom(lerp(1.06, 1, kin) * lerp(1, 0.92, kout) + 0.01 * seg(t, 24.3, 27)), 6 * kout);
-      [24.75, 25.6, 26.45].forEach((at, i) => {
-        const k = ease.backSoft(seg(t, at, at + 0.5));
-        const el = $(`t${i + 1}`);
-        el.style.opacity = String(ease.smooth(seg(t, at, at + 0.22)));
-        el.style.transform = `translateY(${((1 - k) * 46).toFixed(2)}px) scale(${lerp(0.9, 1, k).toFixed(4)})`;
-        el.style.filter = seg(t, at, at + 0.3) < 1 ? `blur(${((1 - seg(t, at, at + 0.3)) * 6).toFixed(2)}px)` : 'none';
-      });
-      bars($('bars2'), 0.55 + 0.35 * (0.5 - 0.5 * Math.cos(t * 10)), t, 2);
-    } else place('recap', 0);
-
-    // ---- 4. What else it does: a carousel ----
+    // ---- 3. What else it does: a carousel ----
     const feats = within('feats', t);
     if (feats) {
-      const kin = ease.outQuint(seg(t, 41.2, 41.6));
-      const kout = ease.inOut(seg(t, 49.45, 49.85));
+      const [a0, b0] = T.feats;
+      const kin = ease.outQuint(seg(t, a0, a0 + 0.4));
+      const kout = ease.inOut(seg(t, b0 - 0.4, b0));
       place('feats', kin * (1 - kout), zoom(lerp(1, 0.94, kout)), 6 * kout);
-      [[41.3, 43.95], [43.85, 45.75], [45.65, 47.35], [47.25, 49.9]].forEach(([a, b], i) => {
+      [[50.45, 53.9], [53.8, 55.7], [55.6, b0]].forEach(([a, b], i) => {
         const el = $(`f${i + 1}`);
         const k = ease.outQuint(seg(t, a, a + 0.5));
         const k2 = ease.inOut(seg(t, b - 0.3, b));
@@ -428,35 +612,37 @@
       });
     } else place('feats', 0);
 
-    // ---- 5. The end card ----
+    // ---- 4. The end card ----
     const end = within('end', t);
     if (end) {
-      const kin = ease.outQuint(seg(t, 49.45, 49.95));
-      const kout = ease.inOut(seg(t, 55.7, 56.05));
-      place('end', kin * (1 - kout), zoom(lerp(1.05, 1, kin) + 0.012 * seg(t, 49.8, 56)));
-      const parts = [['#end .icon', 49.7], ['#end h1', 49.95], ['#end .tag', 50.6], ['#end .meta', 51.05], ['#endR', 51.7]];
-      for (const [sel, at] of parts) {
+      const [a0, b0] = T.end;
+      const kin = ease.outQuint(seg(t, a0 + 0.1, a0 + 0.6));
+      const kout = ease.inOut(seg(t, b0 - 0.4, b0 - 0.05));
+      place('end', kin * (1 - kout), zoom(lerp(1.05, 1, kin) + 0.012 * seg(t, a0 + 0.45, b0)));
+      const parts = [['#end .icon', a0 + 0.35], ['#end h1', a0 + 0.6], ['#end .tag', a0 + 1.25], ['#end .meta', a0 + 1.7], ['#endR', a0 + 2.35]];
+      for (const [sel, when] of parts) {
         const el = document.querySelector(sel);
-        const k = ease.backSoft(seg(t, at, at + 0.5));
-        el.style.opacity = String(ease.smooth(seg(t, at, at + 0.25)));
+        const k = ease.backSoft(seg(t, when, when + 0.5));
+        el.style.opacity = String(ease.smooth(seg(t, when, when + 0.25)));
         el.style.transform = `translateY(${((1 - k) * 34).toFixed(2)}px) scale(${lerp(0.94, 1, k).toFixed(4)})`;
       }
       $('endSpark').setAttribute('transform', `translate(133 18) scale(${(0.8 + 0.3 * (0.5 - 0.5 * Math.cos(t * 30))).toFixed(3)}) rotate(${((t * 400) % 360).toFixed(1)})`);
       $('endBomb').style.transform = `rotate(${(Math.sin(t * 3) * 4).toFixed(3)}deg)`;
     } else place('end', 0);
 
-    // ---- 6. The stinger: KABOOM, then the outro ----
-    const kbA = t >= 59.2 ? 1 - ease.inOut(seg(t, 59.62, 59.85)) : 0;
+    // ---- 5. The stinger: KABOOM, then the outro ----
+    const kbA = t >= T.boom ? 1 - ease.inOut(seg(t, T.boom + 0.42, T.boom + 0.65)) : 0;
     $('kaboom').style.visibility = kbA > 0 ? 'visible' : 'hidden';
     if (kbA > 0) {
-      const k = ease.backSoft(seg(t, 59.2, 59.48));
+      const k = ease.backSoft(seg(t, T.boom, T.boom + 0.28));
       $('kaboom').style.opacity = String(kbA);
       $('kaboom').style.transform = `scale(${lerp(0.2, 1.1, k).toFixed(4)}) rotate(${lerp(-20, -4, k).toFixed(3)}deg)`;
     }
-    place('outro', within('outro', t) ? ease.inOut(seg(t, 59.55, 59.9)) : 0);
+    place('outro', within('outro', t) ? ease.inOut(seg(t, T.outro, T.outro + 0.35)) : 0);
 
-    // Flashes: the card slam and the boom.
-    $('flash').style.opacity = String(Math.max(0.5 * (1 - ease.out(seg(t, 22.6, 22.9))) * (t >= 22.6 ? 1 : 0), 0.65 * (1 - ease.out(seg(t, 59.2, 59.42))) * (t >= 59.2 ? 1 : 0)));
+    // Flashes: the freeze frame, the card slam and the boom.
+    const flash = (when, peak, len) => (t >= when ? peak * (1 - ease.out(seg(t, when, when + len))) : 0);
+    $('flash').style.opacity = String(Math.max(flash(T.freeze, 0.55, 0.22), flash(T.slam, 0.5, 0.3), flash(T.boom, 0.65, 0.22)));
 
     // ---- The big words: glide up out of a soft blur, and cross-fade into the next ----
     const caps = [$('cap'), $('cap2')];
