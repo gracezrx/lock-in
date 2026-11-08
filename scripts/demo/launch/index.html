@@ -3,7 +3,7 @@
   <head>
     <meta charset="utf-8" />
     <title>Lock In launch film</title>
-    <!-- The 60-second launch film (1920x1080). Every frame is drawn from a time t by render(t),
+    <!-- The launch film (1920x1080). Every frame is drawn from a time t by render(t),
          so record.mjs can capture it exactly. The bomb scenes play the bomb clip (../bomb) inside
          this page; the app's screens are the app's own UI (screenshots in ui/, and its card CSS). -->
     <link rel="stylesheet" href="/dist/renderer/base.css" />
@@ -12,7 +12,7 @@
       html, body { width: 1920px; height: 1080px; margin: 0; overflow: hidden; }
       body { position: relative; background: radial-gradient(120% 90% at 50% 40%, #22303c 0%, #101820 70%); font-family: var(--body); color: #fff; }
       iframe { position: absolute; left: 0; top: 0; border: 0; background: transparent; }
-      .layer { position: absolute; inset: 0; visibility: hidden; transform-origin: 0 0; will-change: transform, opacity; }
+      .layer { position: absolute; inset: 0; visibility: hidden; transform-origin: 0 0; }
       #bomb { width: 1920px; height: 1080px; }
 
       /* Sam's screen, up close */
@@ -29,24 +29,17 @@
       #talk .who { flex: none; font-family: var(--display); font-weight: 800; font-size: 24px; line-height: 1; text-transform: uppercase; letter-spacing: 0.02em; white-space: nowrap; }
       #talk .who small { display: block; margin-top: 4px; font-family: var(--body); font-weight: 600; font-size: 13px; letter-spacing: 0; text-transform: none; color: rgba(255, 255, 255, 0.6); }
       #bars { margin-left: auto; display: flex; align-items: center; gap: 4px; height: 40px; }
-      #bars i, #bars2 i { width: 5px; height: 6px; border-radius: 3px; background: var(--yellow); }
+      #bars i { width: 5px; height: 6px; border-radius: 3px; background: var(--yellow); }
       #cursor { position: absolute; left: 0; top: 0; width: 26px; height: 36px; opacity: 0; filter: drop-shadow(0 2px 3px rgba(0, 0, 0, 0.4)); }
       #blocked { position: absolute; display: none; place-items: center; background: #101820; }
       #blocked .bc { width: 560px; padding: 40px 46px; border-radius: 18px; background: #e5202e; color: #fff; box-shadow: 0 30px 70px rgba(0, 0, 0, 0.45); font-family: -apple-system, BlinkMacSystemFont, 'Public Sans', sans-serif; }
       #blocked .mk { font-weight: 700; font-size: 15px; opacity: 0.85; margin-bottom: 14px; }
       #blocked h1 { font-size: 70px; line-height: 0.95; margin: 0 0 14px; font-weight: 900; letter-spacing: -0.01em; }
       #blocked p { margin: 0; font-size: 18px; line-height: 1.45; opacity: 0.94; }
+      #search { position: absolute; left: 50%; top: 46%; width: 780px; margin-left: -390px; display: none; align-items: center; gap: 18px; padding: 24px 32px; border-radius: 999px; background: #fff; color: #202124; font-family: -apple-system, BlinkMacSystemFont, 'Public Sans', sans-serif; font-weight: 500; font-size: 36px; line-height: 1; box-shadow: 0 20px 50px rgba(0, 0, 0, 0.45); }
+      #search svg { width: 38px; height: 38px; flex: none; }
+      #sqCaret { width: 3px; height: 40px; background: #1a73e8; margin-left: -14px; }
       #poof { position: absolute; display: none; padding: 16px 22px; border-radius: 14px; background: #fff; color: var(--ink); font-weight: 700; font-size: 17px; box-shadow: 0 18px 40px rgba(0, 0, 0, 0.35); }
-
-      /* The recap: nudge, talk, yell */
-      #recap { display: flex; justify-content: center; align-items: center; gap: 46px; padding-bottom: 60px; }
-      .tile { width: 520px; height: 460px; border-radius: 26px; background: rgba(255, 255, 255, 0.06); box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.1); display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 34px; opacity: 0; }
-      .tile b { font-family: var(--display); font-weight: 900; font-size: 92px; line-height: 0.9; text-transform: uppercase; }
-      .tile b y { color: var(--yellow); }
-      .tile .n { font-family: var(--display); font-weight: 800; font-size: 28px; letter-spacing: 0.1em; color: rgba(255, 255, 255, 0.55); text-transform: uppercase; }
-      .tile img { width: 420px; border-radius: 12px; box-shadow: 0 18px 40px rgba(0, 0, 0, 0.35); }
-      .tile .mini-talk { position: static; opacity: 1; width: 380px; transform: none; }
-      .tile .mini-card { width: 420px; padding: 26px 30px 24px; border-radius: 14px; background: var(--yellow); color: var(--ink); transform: rotate(-2.5deg); box-shadow: 0 18px 40px rgba(0, 0, 0, 0.35); font-family: var(--display); font-weight: 900; font-size: 44px; line-height: 0.95; }
 
       /* Features */
       .feat { position: absolute; inset: 0; visibility: hidden; }
@@ -72,7 +65,17 @@
       #kaboom { position: absolute; left: 960px; top: 540px; width: 1500px; height: 1100px; margin: -550px 0 0 -750px; visibility: hidden; }
       #outro { background: #000; display: grid; place-items: center; text-align: center; }
       #outro p { font-family: var(--display); font-weight: 900; font-size: 64px; text-transform: uppercase; letter-spacing: 0.02em; }
+      #outro y { color: var(--yellow); }
       #outro small { display: block; margin-top: 18px; font-family: var(--body); font-weight: 600; font-size: 30px; letter-spacing: 0; text-transform: none; color: rgba(255, 255, 255, 0.7); }
+
+      /* The freeze frame's label, and the tape rewinding */
+      #samTag { position: absolute; left: 0; top: 0; display: none; transform-origin: 10px 150px; }
+      #samTag b { position: absolute; left: 70px; top: 0; padding: 12px 22px 14px; border-radius: 14px; background: var(--yellow); color: var(--ink); font-family: var(--display); font-weight: 900; font-size: 54px; line-height: 1; text-transform: uppercase; white-space: nowrap; box-shadow: 0 8px 0 rgba(0, 0, 0, 0.3); }
+      #samTag svg { position: absolute; left: 0; top: 54px; width: 110px; height: 110px; overflow: visible; }
+      #vhs { position: absolute; inset: 0; display: none; overflow: hidden; pointer-events: none; }
+      #vhsLines { position: absolute; inset: 0; background: repeating-linear-gradient(0deg, rgba(0, 0, 0, 0.22) 0 2px, transparent 2px 5px); }
+      #vhsBand { position: absolute; left: 0; right: 0; top: 0; height: 90px; background: linear-gradient(transparent, rgba(255, 255, 255, 0.16) 40%, rgba(255, 255, 255, 0.28) 50%, rgba(255, 255, 255, 0.16) 60%, transparent); mix-blend-mode: screen; }
+      #vhsOsd { position: absolute; left: 70px; bottom: 150px; font-family: var(--display); font-weight: 800; font-size: 92px; line-height: 1; letter-spacing: 0.06em; color: #fff; text-shadow: 4px 0 rgba(255, 40, 80, 0.75), -4px 0 rgba(40, 220, 255, 0.75), 0 4px 0 rgba(0, 0, 0, 0.4); }
 
       /* Words on top */
       .shade { position: absolute; inset: 0 0 auto 0; height: 250px; background: linear-gradient(rgba(16, 24, 32, 0.92) 0%, rgba(16, 24, 32, 0.55) 60%, rgba(16, 24, 32, 0) 100%); opacity: 0; }
@@ -96,11 +99,11 @@
       <div id="bezel"></div>
       <div id="screen">
         <iframe id="mac" src="/scene/mac.html" title="Sam's Mac"></iframe>
-        <div id="blocked"><div class="bc"><div class="mk" id="bMark">Lock In bomb from Grace</div><h1>Locked.</h1><p id="bMsg"></p></div></div>
+        <div id="blocked"><div id="search"><svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="10.5" cy="10.5" r="6.5" fill="none" stroke="#5f6368" stroke-width="2.4" /><path d="m15.5 15.5 5 5" stroke="#5f6368" stroke-width="2.4" stroke-linecap="round" /></svg><span id="sq"></span><i id="sqCaret"></i></div><div class="bc"><div class="mk" id="bMark">Lock In bomb from Grace</div><h1 id="bH1">Locked.</h1><p id="bMsg"></p></div></div>
         <div id="poof"></div>
         <iframe id="toast" src="toast.html" title="Corner card"></iframe>
         <div id="glow"></div>
-        <div id="drift">Drifting · 22 min</div>
+        <div id="drift">Drifting · 47 min</div>
         <div id="talk">
           <span class="lk"><svg width="20" height="20" viewBox="0 0 24 24"><path d="M7 11V8a5 5 0 0 1 10 0v3" fill="none" stroke="currentColor" stroke-width="2.6"/><rect x="4.5" y="11" width="15" height="10" rx="2.5" fill="currentColor"/></svg></span>
           <span class="who">Lock In<small>is talking to you</small></span>
@@ -111,20 +114,7 @@
       </div>
     </div>
 
-    <!-- 3. Nudge, talk, yell -->
-    <div class="layer" id="recap">
-      <div class="tile" id="t1"><span class="n">First</span><iframe src="toast.html" title="" style="position:static;width:400px;height:170px;transform:scale(1.1)"></iframe><b>It <y>nudges</y></b></div>
-      <div class="tile" id="t2"><span class="n">Then</span>
-        <div id="talk2" class="mini-talk" style="width:420px;display:flex;align-items:center;gap:14px;padding:0 20px;height:74px;border-radius:16px;background:#101820;box-shadow:0 18px 40px rgba(0,0,0,.4),inset 0 0 0 1px rgba(255,255,255,.12)">
-          <span style="width:38px;height:38px;border-radius:10px;display:grid;place-items:center;background:var(--yellow);color:var(--ink)"><svg width="20" height="20" viewBox="0 0 24 24"><path d="M7 11V8a5 5 0 0 1 10 0v3" fill="none" stroke="currentColor" stroke-width="2.6"/><rect x="4.5" y="11" width="15" height="10" rx="2.5" fill="currentColor"/></svg></span>
-          <span style="flex:none;white-space:nowrap;font-family:var(--display);font-weight:800;font-size:24px;text-transform:uppercase">Lock In<small style="display:block;margin-top:4px;font-family:var(--body);font-weight:600;font-size:13px;text-transform:none;color:rgba(255,255,255,.6)">is talking to you</small></span>
-          <span id="bars2" style="margin-left:auto;display:flex;align-items:center;gap:4px;height:40px"></span>
-        </div>
-        <b>It <y>talks</y></b></div>
-      <div class="tile" id="t3"><span class="n">Then</span><div class="mini-card">This is an intervention.</div><b>It <y>yells</y></b></div>
-    </div>
-
-    <!-- 4. What else it does: the app's own screens -->
+    <!-- 3. What else it does: the app's own screens -->
     <div class="layer" id="feats">
       <div class="feat" id="f1">
         <img src="ui/panel-idle.png" alt="" style="left: 300px; top: 158px; width: 440px;" />
@@ -138,13 +128,9 @@
         <img src="ui/setup-connect.png" alt="" style="left: 210px; top: 190px; width: 1000px;" />
         <div class="note" style="left: 1290px; top: 400px; width: 470px;"><b>Three questions, four clicks.</b> Goals, to-dos, distractions, then Chrome and your calendar hook up by themselves.</div>
       </div>
-      <div class="feat" id="f4">
-        <img src="ui/panel-drifting.png" alt="" style="left: 400px; top: 158px; width: 440px;" />
-        <img src="ui/panel-locked.png" alt="" style="left: 1080px; top: 158px; width: 440px;" />
-      </div>
     </div>
 
-    <!-- 5. The end card -->
+    <!-- 4. The end card -->
     <div class="layer" id="end">
       <div class="l">
         <img class="icon" src="/icon.png" alt="" />
@@ -164,10 +150,12 @@
       </div>
     </div>
 
-    <!-- 6. Outro -->
-    <div class="layer" id="outro"><p>He never learns.<small>Lock In · free for Mac · gracezrx.com/lock-in</small></p></div>
+    <!-- 5. Outro -->
+    <div class="layer" id="outro"><p>He was <y>not</y> just closing it.<small>Lock In · free for Mac · gracezrx.com/lock-in</small></p></div>
 
 
+    <div id="samTag"><svg viewBox="0 0 110 110" aria-hidden="true"><path d="M92 6 C 70 30, 40 50, 16 92" fill="none" stroke="#ffcf00" stroke-width="9" stroke-linecap="round" /><path d="M8 66 L 14 98 L 44 86" fill="none" stroke="#ffcf00" stroke-width="9" stroke-linecap="round" stroke-linejoin="round" /></svg><b>That’s Sam</b></div>
+    <div id="vhs"><div id="vhsLines"></div><div id="vhsBand"></div><div id="vhsOsd"></div></div>
     <div class="shade" id="shade"></div>
     <div class="cap" id="cap"></div>
     <div class="cap" id="cap2"></div>

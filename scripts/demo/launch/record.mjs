@@ -1,4 +1,4 @@
-// Records the 60-second launch film (1920x1080, 30 fps) with its sound:
+// Records the launch film (1920x1080, 60 fps, about a minute) with its sound:
 //   docs/launch.mp4             the AI voices (narrator, the coach, Sam)
 //   docs/launch-your-voice.mp4  the same film without the narrator, to record your own voice over
 //
@@ -79,7 +79,8 @@ const VO_DIR = join(here, 'vo');
 const voices = {};
 const VO_DUR = {};
 const VO_ENV = {};
-for (const f of ['n1', 's1', 'n2', 'n3', 'c1', 'c2', 'n4', 'n5', 'n6', 's2', 'n7', 'n8', 'c3']) {
+const LINE_IDS = [...readFileSync(join(here, 'film.js'), 'utf8').matchAll(/\{ id: '(\w+)', who: '\w+', at: [\d.]+, text: '/g)].map((m) => m[1]);
+for (const f of LINE_IDS) {
   const file = join(VO_DIR, `${f}.wav`);
   if (!existsSync(file)) throw new Error(`Missing ${file}: run python3 scripts/demo/launch/tts.py first`);
   const s = resample(readWav(file));
@@ -140,7 +141,7 @@ await page.evaluate(async ({ dur, env }) => {
     for (const f of d.querySelectorAll('iframe')) if (f.contentDocument) walk(f.contentDocument);
   };
   walk(document);
-  for (const t of [1, 8, 12, 16, 23, 25, 30, 35, 40, 44, 52, 57, 59.3]) window.render(t);
+  for (const t of [1, 3, 5, 8, 12, 14, 18, 23, 30, 31, 34, 38, 42, 45, 49, 52, 58, 63, 66]) window.render(t);
   for (const d of docs) {
     await Promise.all(['900 40px "Big Shoulders Display"', '800 40px "Big Shoulders Display"', '400 16px "Public Sans"', '600 16px "Public Sans"', '700 16px "Public Sans"'].map((f) => d.fonts.load(f).catch(() => null)));
     await d.fonts.ready;
@@ -162,7 +163,7 @@ if (args.stills) {
 }
 
 // ---- frames, one encoded file per chunk ----
-const cuts = [0, 10, 24.3, 27, 34.4, 39.6, 41.4, 49.6, 56, FILM.LENGTH];
+const cuts = [0, 5.35, 12.2, 21.2, 30.5, 39.65, 48.7, 56.85, 61.9, FILM.LENGTH];
 // Frame numbers here count the moments drawn (FPS x SUB a second).
 const chunks = cuts.slice(0, -1).map((a, i) => [Math.round(a * FPS * SUB), Math.round(cuts[i + 1] * FPS * SUB)]);
 const only = args.only !== undefined ? Number(args.only) : null;
@@ -357,6 +358,60 @@ function sfxTrack(F, n) {
         x.noise(at, 1.2, 4.2, 4, 0.1);
         for (let i = 0; i < 22; i++) x.add(at + 0.08 + ((i * 0.041) % 0.8), 0.012, (_t, k) => x.rand() * 0.25 * (1 - k));
         break;
+      case 'flick': x.sweep(at - 0.02, 0.13, 3600, 1500, 0.28); break;
+      case 'tick': x.tone(at, 0.09, 2637, 0.14, { decay: 30 }); x.tone(at + 0.05, 0.09, 3520, 0.08, { decay: 34 }); break;
+      case 'scratch':
+        // The needle dragged back and forth across the record.
+        x.sweep(at, 0.11, 3000, 500, 1.4, 0.3);
+        x.sweep(at + 0.1, 0.2, 450, 3200, 1.2, 0.3);
+        x.noise(at, 0.32, 0.3, 10, 0.7);
+        x.tone(at, 0.25, (t) => 160 - 100 * t, 0.3, { type: 'saw', decay: 9, lp: 0.1 });
+        break;
+      case 'rewind': {
+        // Tape whirring backwards: a rising whine, chipmunk chatter and hiss.
+        const d = e.until - at;
+        x.tone(at, d, (t) => 300 + 1500 * (t / d), 0.1, { type: 'saw', attack: 0.04, decay: -0.6, lp: 0.06 });
+        for (let t = 0; t < d - 0.03; t += 0.038 + ((t * 1000) % 7) * 0.003) {
+          const f = 700 + ((t * 7919) % 1500);
+          x.tone(at + t, 0.035, f * (1 + t / d), 0.07 + ((t * 313) % 5) * 0.012, { type: 'square', attack: 0.004, decay: 25, lp: 0.2 });
+        }
+        x.add(at, d, (_t, k) => x.rand() * 0.035 * Math.sin(Math.PI * k));
+        break;
+      }
+      case 'clunk':
+        x.add(at, 0.012, (_t, k) => x.rand() * 0.6 * (1 - k));
+        x.tone(at, 0.14, 95, 0.45, { decay: 28 });
+        x.tone(at + 0.06, 0.05, 1900, 0.06, { decay: 80 });
+        break;
+      case 'zip':
+        x.sweep(at - 0.05, e.until - at + 0.1, 500, 4200, 0.6);
+        for (let t = at; t < e.until; t += 0.055) x.sweep(t, 0.07, 3800, 1800, 0.15);
+        break;
+      case 'sting':
+        // Dun, dun, DUN: brass (two detuned saws an octave over a sine) and a timpani on the last.
+        [[0, 147, 0.22], [0.25, 147, 0.22], [0.5, 139, 1.3]].forEach(([d, f, len]) => {
+          const vib = (t) => f * (1 + (len > 1 ? 0.012 * Math.sin(2 * Math.PI * 5.5 * t) * Math.min(1, t / 0.3) : 0));
+          for (const det of [1, 1.006, 2.003]) x.tone(at + d, len + 0.25, (t) => vib(t) * det, det > 2 ? 0.07 : 0.16, { type: 'saw', attack: 0.012, decay: len > 1 ? 1.4 : 5, lp: 0.07 });
+          x.tone(at + d, len + 0.25, (t) => vib(t) / 2, 0.22, { attack: 0.01, decay: len > 1 ? 1.6 : 5 });
+        });
+        x.tone(at + 0.5, 1.2, (t) => 62 + 30 * Math.exp(-t * 7), 0.75, { attack: 0.003, decay: 3 });
+        x.noise(at + 0.5, 0.3, 0.35, 12, 0.12);
+        break;
+      case 'womp':
+        // The sad trombone: four notes down, the last one wobbling.
+        [[0, 233, 0.3], [0.32, 220, 0.3], [0.64, 208, 0.3], [0.96, 196, 1.0]].forEach(([d, f, len]) => {
+          let ph = 0;
+          let y = 0;
+          x.add(at + d, len, (t) => {
+            const fr = f * (1 + (len > 0.5 ? 0.035 * Math.sin(2 * Math.PI * 6 * t) * Math.min(1, t / 0.15) : 0)) * (1 - 0.03 * (t / len));
+            ph += (2 * Math.PI * fr) / SR;
+            const w = ((ph / Math.PI) % 2) - 1;
+            const open = 0.025 + 0.11 * Math.sin(Math.PI * Math.min(1, t / Math.min(len, 0.35)));
+            y += open * (w - y);
+            return y * 0.5 * Math.min(1, t / 0.025) * Math.min(1, (len - t) / 0.08);
+          });
+        });
+        break;
       default: break;
     }
   }
@@ -373,9 +428,9 @@ function musicTrack(F, n) {
   const BASS = [[48, 0, 0.5], [48, 1.5, 0.25], [51, 2, 0.5], [53, 3, 0.25], [55, 3.5, 0.25], [43, 4, 0.5], [43, 5.5, 0.25], [46, 6, 0.5], [48, 7, 0.5]];
   const CHORDS = [[60, 63, 67, 70], [60, 63, 67, 70], [56, 60, 63, 67], [58, 62, 65, 70]];
   const hz = (m) => 440 * Math.pow(2, (m - 69) / 12);
-  // Quieter in the intro and under the coach's lecture; full for the montage and the end card.
-  const level = (t) => (t < 5.5 ? 0.55 : t < 10 ? 0.9 : t < 22.6 ? 0.6 : t < 41.4 ? 0.85 : t < 56 ? 1 : 0.45);
-  const busy = (t) => t >= 5.5 && t < 56;
+  // How loud, section by section (film.js says), and where the claps and stabs come in.
+  const level = (t) => F.MUSIC.levels.filter(([a]) => t >= a).pop()?.[1] ?? 1;
+  const busy = (t) => F.MUSIC.busy.some(([a, b]) => t >= a && t < b);
   for (let b = 0; start + b * bar < end; b++) {
     const t0 = start + b * bar;
     for (let k = 0; k < 8; k++) {
@@ -411,12 +466,13 @@ function musicTrack(F, n) {
       }
     }
   }
-  // Eases in at the start; out at the card slam (a beat of silence, softly back), dead at the boom.
+  // Cut dead at each of film.js's cuts (the record scratch, the card slam, "It is."), then
+  // softly back in; dead at the boom.
   for (let i = 0; i < n; i++) {
     const t = i / SR;
-    let g = Math.min(1, Math.max(0, (t - start) / 1.2));
-    if (t >= 22.6 && t < 23.4) g *= Math.max(0, (t - 22.95) / 0.45);
-    if (t >= end) g = 0;
+    let g = Math.min(1, Math.max(0, (t - start) / 0.05));
+    for (const [a, b, back] of F.MUSIC.cuts) if (t >= a && t < b + back) g *= t < b ? Math.max(0, 1 - (t - a) / 0.012) : (t - b) / back;
+    if (t >= end) g *= Math.max(0, 1 - (t - end) / 0.012);
     x.buf[i] *= g;
   }
   return x.buf;
