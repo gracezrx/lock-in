@@ -8,6 +8,10 @@
     in: (k) => k * k * k,
     inOut: (k) => (k < 0.5 ? 4 * k * k * k : 1 - Math.pow(-2 * k + 2, 3) / 2),
     back: (k) => 1 + 2.70158 * Math.pow(k - 1, 3) + 1.70158 * Math.pow(k - 1, 2),
+    // A softer overshoot, and the long gentle tails that make moves feel smooth.
+    backSoft: (k) => 1 + 2.2 * Math.pow(k - 1, 3) + 1.2 * Math.pow(k - 1, 2),
+    outQuint: (k) => 1 - Math.pow(1 - k, 5),
+    smooth: (k) => k * k * (3 - 2 * k),
   };
   const $ = (id) => document.getElementById(id);
 
@@ -68,16 +72,17 @@
   // The bomb clip's own clock, for each moment it's on screen.
   function bombTime(t) {
     if (t < 5.5) return 0.28 * (t / 5.5);
-    if (t < 10) return 0.3 + 1.95 * Math.pow((t - 5.5) / 4.5, 1.6);
+    if (t < 12) return 0.3 + 1.95 * Math.pow(Math.min(1, (t - 5.5) / 4.5), 1.6);
     if (t < 29.4) return 1.7 + (t - 27) * 0.27;
-    if (t < 34.4) return 2.45 + (t - 29.4);
+    if (t < 37) return 2.45 + (t - 29.4);
     return 8.05 + (t - 39.6);
   }
   // Sam's Mac, up close.
   function macTime(t) {
     if (t < 22.6) return 0.3 + (t - 10) * 0.09;
     if (t < 24.3) return 0.3 + 12.6 * 0.09;
-    if (t < 39.6) return 1.0;
+    if (t < 39.3) return 1.0;
+    if (t < 55) return 8.45 + (t - 39.3);
     return 9.85;
   }
 
@@ -177,17 +182,70 @@
     $('kIn').setAttribute('points', pts(380, 230, 14));
   }
 
+  // ---- Layers, and the camera moves between them ----
+  // Each layer's time on screen; the edges overlap so one shot flows into the next.
+  const ON = {
+    wide: [[0, 10.35], [26.75, 34.7], [39.55, 41.7]],
+    close: [[9.75, 24.55], [34.1, 40.15], [55.8, 59.4]],
+    recap: [[24.05, 27.2]],
+    feats: [[41.2, 49.9]],
+    end: [[49.35, 56.1]],
+    outro: [[59.5, 60.6]],
+  };
+  // The camera pushes into Sam's laptop screen (1) and pulls back out of it (-1).
+  const PUSH = [{ a: 9.75, b: 10.35, dir: 1 }, { a: 34.1, b: 34.7, dir: 1 }, { a: 39.55, b: 40.15, dir: -1 }];
+  const CLOSE = { x: 243, y: 150, w: 1433.6, h: 896 };
+  const within = (name, t) => ON[name].find(([a, b]) => t >= a && t < b);
+  const zoom = (s, cx = 960, cy = 540) => ({ s, x: cx * (1 - s), y: cy * (1 - s) });
+  /** Shows a layer at an opacity, a transform ({s, x, y}, origin top left) and a blur. */
+  function place(id, alpha, m, blur = 0) {
+    const el = $(id);
+    const on = alpha > 0.002;
+    show(id, on);
+    if (!on) return;
+    el.style.opacity = alpha >= 0.999 ? '1' : alpha.toFixed(3);
+    el.style.transform = m ? `translate(${m.x.toFixed(2)}px, ${m.y.toFixed(2)}px) scale(${m.s.toFixed(5)})` : 'none';
+    el.style.filter = blur > 0.05 ? `blur(${blur.toFixed(2)}px)` : 'none';
+  }
+  /** Where the wide shot's laptop screen is (after the bomb clip has drawn this frame). */
+  function laptopRect() {
+    const r = $('bomb').contentDocument?.querySelector('.laptop .screen')?.getBoundingClientRect();
+    return r ? { x: r.left, y: r.top, w: r.width, h: r.height } : { x: 60, y: 402, w: 960, h: 600 };
+  }
+  /** The transform that puts a screen drawn at rect `from` where rect `to` is. */
+  const fit = (from, to) => {
+    const s = to.w / from.w;
+    return { s, x: to.x - s * from.x, y: to.y - s * from.y };
+  };
+
+  // Every phrase of every line, with its own start and end (subtitles cross-fade between them).
+  function phraseTimes() {
+    const out = [];
+    for (const v of VO) {
+      const parts = phrases(v.text);
+      const total = parts.reduce((n, p) => n + p.length, 0);
+      const dur = window.VO_DUR?.[v.id] ?? DUR[v.id];
+      let acc = 0;
+      parts.forEach((p, i) => {
+        const a = v.at + (acc / total) * dur;
+        acc += p.length;
+        const b = i === parts.length - 1 ? v.at + dur + 0.25 : v.at + (acc / total) * dur;
+        out.push({ key: `${v.id}:${i}`, who: v.who, text: p, a, b, first: i === 0, last: i === parts.length - 1 });
+      });
+    }
+    return out;
+  }
+
   window.render = (t) => {
     star();
-    // Fade in from black.
-    $('fade').style.opacity = String(1 - seg(t, 0, 0.35));
+    $('fade').style.opacity = String(1 - ease.inOut(seg(t, 0, 0.6)));
 
-    // 1. The wide shot (the bomb clip)
-    const wide = inScene('wide', t);
-    show('wide', !!wide);
+    // ---- 1. The wide shot (the bomb clip) ----
+    const wide = within('wide', t);
+    const push = PUSH.find((p) => t >= p.a && t < p.b);
+    let wideRect = null;
     if (wide) {
-      const bt = bombTime(t);
-      bombWin().render?.(bt);
+      bombWin().render?.(bombTime(t));
       const d = $('bomb').contentDocument;
       if (d && !d.getElementById('launchCss')) {
         const st = d.createElement('style');
@@ -197,83 +255,125 @@
         const tag = d.getElementById('tagPhone');
         if (tag) tag.textContent = 'Grace’s phone';
       }
-      const k = ease.out(seg(t, wide[0], wide[0] + 0.3));
-      $('wide').style.transform = wide[0] > 0 ? `scale(${lerp(1.06, 1, k)})` : 'none';
+      wideRect = laptopRect();
+    }
+    let wideA = wide ? 1 : 0;
+    let wideM = null;
+    let wideBlur = 0;
+    if (wide && wide[0] === 26.75) {
+      // In from the recap: settles back from a slight zoom.
+      const k = ease.outQuint(seg(t, 26.75, 27.25));
+      wideA = k;
+      wideM = zoom(lerp(1.08, 1, k));
+    }
+    if (wide && wide[0] === 39.55 && t >= 41.2) {
+      // Out to the feature tour: pushes forward and dissolves.
+      const k = ease.inOut(seg(t, 41.2, 41.7));
+      wideA = 1 - k;
+      wideM = zoom(lerp(1, 1.12, k));
+      wideBlur = 7 * k;
     }
 
-    // 2. Sam's screen, up close
-    const close = inScene('close', t);
-    show('close', !!close);
+    // ---- 2. Sam's screen, up close ----
+    const close = within('close', t);
+    let closeA = close ? 1 : 0;
+    let closeM = null;
+    let closeBlur = 0;
+    if (push && wideRect) {
+      // The push: both shots put the laptop screen at the same place, so the cut can't be seen.
+      const k = ease.inOut(seg(t, push.a, push.b));
+      const kk = push.dir > 0 ? k : 1 - k;
+      const R = { x: lerp(wideRect.x, CLOSE.x, kk), y: lerp(wideRect.y, CLOSE.y, kk), w: lerp(wideRect.w, CLOSE.w, kk), h: lerp(wideRect.h, CLOSE.h, kk) };
+      wideM = fit(wideRect, R);
+      closeM = fit(CLOSE, R);
+      closeA = ease.smooth(seg(kk, 0.25, 0.7));
+    } else if (close && close[0] === 9.75 && t >= 24.05) {
+      // Out to the recap: pulls back and softens.
+      const k = ease.inOut(seg(t, 24.05, 24.55));
+      closeA = 1 - k;
+      closeM = zoom(lerp(1, 0.86, k));
+      closeBlur = 8 * k;
+    } else if (close && close[0] === 55.8) {
+      // Back in after the end card (five minutes later).
+      const k = ease.outQuint(seg(t, 55.95, 56.4));
+      closeA = k;
+      closeM = zoom(lerp(1.05, 1, k));
+    }
+    place('wide', wideA, wideM, wideBlur);
+    place('close', closeA, closeM, closeBlur);
+
     if (close) {
-      const mt = macTime(t);
-      macWin().render?.(mt);
+      macWin().render?.(macTime(t));
       const md = $('mac').contentDocument;
-      const k = ease.out(seg(t, close[0], close[0] + 0.32));
-      $('close').style.transform = `scale(${lerp(0.9, 1, k)})`;
-      $('close').style.opacity = String(seg(t, close[0], close[0] + 0.12));
 
       // The padlock in the menu bar lights up: he's drifting.
       const tray = md?.getElementById('tray')?.getBoundingClientRect();
-      const glowOn = t > 11.8 && t < 15.6;
-      $('glow').style.opacity = glowOn ? String(0.55 + 0.45 * Math.abs(Math.sin((t - 11.8) * 4))) : '0';
-      $('drift').style.opacity = String(t > 12.0 && t < 15.6 ? ease.out(seg(t, 12.0, 12.2)) : 0);
+      const glowA = seg(t, 11.8, 12.1) * (1 - seg(t, 15.35, 15.7));
+      $('glow').style.opacity = String(glowA * (0.6 + 0.4 * (0.5 - 0.5 * Math.cos((t - 11.8) * 7))));
+      const driftA = ease.outQuint(seg(t, 12.0, 12.35)) * (1 - seg(t, 15.35, 15.7));
+      const tIn = ease.outQuint(seg(t, 12.8, 13.3));
+      const tOut = ease.inOut(seg(t, 15.1, 15.45));
+      $('drift').style.opacity = String(driftA);
       if (tray) {
         Object.assign($('glow').style, { left: `${tray.left - 14}px`, top: `${tray.top - 6}px`, width: `${tray.width + 28}px`, height: `${tray.height + 12}px` });
-        Object.assign($('drift').style, { left: `${tray.left - 40}px`, top: `${tray.bottom + 10}px` });
+        Object.assign($('drift').style, { left: `${tray.left - 40}px`, top: `${tray.bottom + 10 + 180 * ease.inOut(seg(t, 12.8, 13.25)) * (1 - tOut)}px` });
       }
 
       // The corner card slides in, he closes it.
-      const tin = ease.out(seg(t, 12.8, 13.15));
-      const tout = ease.in(seg(t, 15.1, 15.35));
-      $('toast').style.opacity = String(t < 12.8 || t > 15.4 ? 0 : 1);
-      $('toast').style.transform = `translateX(${(1 - tin) * 440 + tout * 440}px)`;
-      $('drift').style.top = tray ? `${tray.bottom + 10 + (t > 12.8 && t < 15.4 ? 180 : 0)}px` : '';
+      $('toast').style.opacity = String(seg(t, 12.8, 13.0) * (1 - seg(t, 15.2, 15.45)));
+      $('toast').style.transform = `translateX(${((1 - tIn) * 440 + tOut * 440).toFixed(2)}px)`;
 
       // Lock In talks (the bars follow the voice).
       const talkLine = t < 22.6 ? (t < 21.6 ? 'c1' : 'c2') : 'c3';
-      const talking = (t > 15.8 && t < 22.6) || (t > 56.9 && t < 58.75);
-      const ta = talking ? ease.out(seg(t, t < 22.6 ? 15.8 : 56.9, (t < 22.6 ? 15.8 : 56.9) + 0.25)) : 0;
+      const from = t < 40 ? 15.8 : 56.9;
+      const until = t < 40 ? 22.6 : 58.8;
+      const ta = ease.outQuint(seg(t, from, from + 0.4)) * (1 - seg(t, until - 0.05, until + 0.2));
       $('talk').style.opacity = String(ta);
-      $('talk').style.transform = `translateY(${(1 - ta) * -16}px)`;
-      if (talking) bars($('bars'), loud(talkLine, t), t, 0);
+      $('talk').style.transform = `translateY(${((1 - ta) * -14).toFixed(2)}px)`;
+      if (ta > 0) bars($('bars'), loud(talkLine, t), t, 0);
 
-      // The card slams down.
-      const ck = t >= 22.6 && t < 24.3 ? t - 22.6 : -1;
+      // The card slams down (on purpose, not smooth).
+      const ck = t >= 22.6 && t < 24.6 ? t - 22.6 : -1;
       $('coach').style.visibility = ck >= 0 ? 'visible' : 'hidden';
       coachWin().render?.(ck);
 
-      // The cursor: to the corner card's ×, then (much later) toward the feed's tab.
+      // The cursor: to the corner card's ×, then (five minutes later) creeping toward the feed's tab.
       const cur = $('cursor');
       let cx = null;
       let cy = null;
-      let press = false;
-      if (t > 14.1 && t < 15.6) {
-        const k2 = ease.inOut(seg(t, 14.15, 15.0));
+      let ca = 0;
+      let press = 0;
+      if (t > 13.9 && t < 15.8) {
+        const k2 = ease.inOut(seg(t, 14.1, 15.0));
         cx = lerp(640, 1232, k2);
         cy = lerp(520, 58, k2);
-        press = t > 15.02 && t < 15.12;
+        ca = seg(t, 13.9, 14.15) * (1 - seg(t, 15.45, 15.8));
+        press = Math.sin(Math.PI * seg(t, 15.0, 15.16));
       }
-      if (t >= 56.0 && t < 59.2) {
+      if (t >= 56.0 && t < 59.3) {
         const tab = md?.getElementById('tabFeed');
         if (tab) {
           tab.style.display = 'flex';
           tab.classList.remove('on');
         }
         const r = tab?.getBoundingClientRect();
-        const k3 = ease.inOut(seg(t, 56.3, 58.6));
+        const k3 = ease.inOut(seg(t, 56.3, 58.7));
         cx = lerp(700, r ? r.left + r.width / 2 : 400, k3);
         cy = lerp(560, r ? r.top + r.height / 2 + 4 : 70, k3);
+        ca = seg(t, 56.1, 56.4);
       }
-      cur.style.opacity = cx === null ? '0' : '1';
-      if (cx !== null) cur.style.transform = `translate(${cx}px, ${cy}px) scale(${press ? 0.86 : 1})`;
+      cur.style.opacity = String(ca);
+      if (cx !== null) cur.style.transform = `translate(${cx.toFixed(2)}px, ${cy.toFixed(2)}px) scale(${(1 - 0.14 * press).toFixed(3)})`;
 
-      // The lockout: every site he tries is locked.
-      const gag = t >= 34.4 && t < 39.6;
+      // The lockout: every site he tries is locked; then he gives up and the doc comes back.
+      const gag = t >= 34.1 && t < 39.55;
       const feed = md?.getElementById('feed')?.getBoundingClientRect();
       const bl = $('blocked');
-      bl.style.display = gag && t >= TRIES[0].hit ? 'grid' : 'none';
+      const blA = t >= TRIES[0].hit ? 1 - ease.inOut(seg(t, 39.25, 39.55)) : 0;
+      bl.style.display = gag && blA > 0 ? 'grid' : 'none';
+      bl.style.opacity = String(blA);
       if (feed) Object.assign(bl.style, { left: `${feed.left}px`, top: `${feed.top}px`, width: `${feed.width}px`, height: `${feed.height}px` });
-      if (gag && md) {
+      if (gag && md && t < 39.3) {
         const cur2 = [...TRIES].reverse().find((x) => t >= x.at);
         const url = md.getElementById('url');
         if (cur2 && url) {
@@ -284,104 +384,124 @@
         const hit = cur2 && t >= cur2.hit;
         card.style.visibility = hit ? 'visible' : 'hidden';
         if (hit) {
-          const k4 = ease.back(seg(t, cur2.hit, cur2.hit + 0.22));
-          card.style.transform = `scale(${lerp(1.3, 1, k4)}) rotate(${lerp(-6, 2, k4)}deg)`;
+          const k4 = ease.backSoft(seg(t, cur2.hit, cur2.hit + 0.3));
+          card.style.transform = `scale(${lerp(1.25, 1, k4).toFixed(4)}) rotate(${lerp(-6, 2, k4).toFixed(3)}deg)`;
+          card.style.opacity = String(seg(t, cur2.hit, cur2.hit + 0.06));
           $('bMsg').textContent = `${cur2.url} is locked for ${cur2.left}. Every distraction is. Back to work.`;
         }
       }
       $('poof').style.display = 'none';
     }
 
-    // 3. The recap: nudge, talk, yell
-    const recap = inScene('recap', t);
-    show('recap', !!recap);
+    // ---- 3. The recap: nudge, talk, yell ----
+    const recap = within('recap', t);
     if (recap) {
+      const kin = ease.outQuint(seg(t, 24.05, 24.6));
+      const kout = ease.inOut(seg(t, 26.75, 27.2));
+      place('recap', kin * (1 - kout), zoom(lerp(1.06, 1, kin) * lerp(1, 0.92, kout) + 0.01 * seg(t, 24.3, 27)), 6 * kout);
       [24.75, 25.6, 26.45].forEach((at, i) => {
-        const k = ease.back(seg(t, at, at + 0.28));
+        const k = ease.backSoft(seg(t, at, at + 0.5));
         const el = $(`t${i + 1}`);
-        el.style.opacity = String(seg(t, at, at + 0.1));
-        el.style.transform = `translateY(${(1 - k) * 60}px) scale(${lerp(0.86, 1, k)})`;
+        el.style.opacity = String(ease.smooth(seg(t, at, at + 0.22)));
+        el.style.transform = `translateY(${((1 - k) * 46).toFixed(2)}px) scale(${lerp(0.9, 1, k).toFixed(4)})`;
+        el.style.filter = seg(t, at, at + 0.3) < 1 ? `blur(${((1 - seg(t, at, at + 0.3)) * 6).toFixed(2)}px)` : 'none';
       });
-      bars($('bars2'), 0.55 + 0.35 * Math.abs(Math.sin(t * 5)), t, 2);
-    }
+      bars($('bars2'), 0.55 + 0.35 * (0.5 - 0.5 * Math.cos(t * 10)), t, 2);
+    } else place('recap', 0);
 
-    // 4. What else it does
-    const feats = inScene('feats', t);
-    show('feats', !!feats);
+    // ---- 4. What else it does: a carousel ----
+    const feats = within('feats', t);
     if (feats) {
-      [[41.4, 43.9], [43.9, 45.7], [45.7, 47.3], [47.3, 49.6]].forEach(([a, b], i) => {
+      const kin = ease.outQuint(seg(t, 41.2, 41.6));
+      const kout = ease.inOut(seg(t, 49.45, 49.85));
+      place('feats', kin * (1 - kout), zoom(lerp(1, 0.94, kout)), 6 * kout);
+      [[41.3, 43.95], [43.85, 45.75], [45.65, 47.35], [47.25, 49.9]].forEach(([a, b], i) => {
         const el = $(`f${i + 1}`);
+        const k = ease.outQuint(seg(t, a, a + 0.5));
+        const k2 = ease.inOut(seg(t, b - 0.3, b));
         const on = t >= a && t < b;
         el.style.visibility = on ? 'visible' : 'hidden';
         if (!on) return;
-        const k = ease.out(seg(t, a, a + 0.38));
-        el.style.transform = `translateX(${(1 - k) * 260}px)`;
-        el.style.opacity = String(seg(t, a, a + 0.15));
-        [...el.querySelectorAll('img')].forEach((img, j) => (img.style.transform = `rotate(${(j % 2 ? 2 : -2) * (1 - 0.3 * k)}deg) scale(${lerp(0.94, 1, k) + (t - a) * 0.006})`));
+        el.style.transform = `translateX(${((1 - k) * 200 - k2 * 200).toFixed(2)}px)`;
+        el.style.opacity = String(ease.smooth(seg(t, a, a + 0.25)) * (1 - k2));
+        [...el.querySelectorAll('img')].forEach((img, j) => (img.style.transform = `rotate(${((j % 2 ? 2 : -2) * (1 - 0.3 * k)).toFixed(3)}deg) scale(${(lerp(0.95, 1, k) + (t - a) * 0.006).toFixed(4)})`));
       });
-    }
+    } else place('feats', 0);
 
-    // 5. The end card
-    const end = inScene('end', t);
-    show('end', !!end);
+    // ---- 5. The end card ----
+    const end = within('end', t);
     if (end) {
+      const kin = ease.outQuint(seg(t, 49.45, 49.95));
+      const kout = ease.inOut(seg(t, 55.7, 56.05));
+      place('end', kin * (1 - kout), zoom(lerp(1.05, 1, kin) + 0.012 * seg(t, 49.8, 56)));
       const parts = [['#end .icon', 49.7], ['#end h1', 49.95], ['#end .tag', 50.6], ['#end .meta', 51.05], ['#endR', 51.7]];
       for (const [sel, at] of parts) {
         const el = document.querySelector(sel);
-        const k = ease.back(seg(t, at, at + 0.3));
-        el.style.opacity = String(seg(t, at, at + 0.12));
-        el.style.transform = `translateY(${(1 - k) * 40}px) scale(${lerp(0.9, 1, k)})`;
+        const k = ease.backSoft(seg(t, at, at + 0.5));
+        el.style.opacity = String(ease.smooth(seg(t, at, at + 0.25)));
+        el.style.transform = `translateY(${((1 - k) * 34).toFixed(2)}px) scale(${lerp(0.94, 1, k).toFixed(4)})`;
       }
-      $('endSpark').setAttribute('transform', `translate(133 18) scale(${(0.75 + 0.35 * Math.abs(Math.sin(t * 23))).toFixed(2)}) rotate(${(t * 400) % 360})`);
-      $('endBomb').style.transform = `rotate(${Math.sin(t * 3) * 4}deg)`;
-    }
+      $('endSpark').setAttribute('transform', `translate(133 18) scale(${(0.8 + 0.3 * (0.5 - 0.5 * Math.cos(t * 30))).toFixed(3)}) rotate(${((t * 400) % 360).toFixed(1)})`);
+      $('endBomb').style.transform = `rotate(${(Math.sin(t * 3) * 4).toFixed(3)}deg)`;
+    } else place('end', 0);
 
-    // 6. The stinger: KABOOM, then the outro
-    const kb = t >= 59.2 && t < 59.75;
-    $('kaboom').style.visibility = kb ? 'visible' : 'hidden';
-    if (kb) {
-      const k = ease.back(seg(t, 59.2, 59.45));
-      $('kaboom').style.transform = `scale(${lerp(0.2, 1.1, k)}) rotate(${lerp(-20, -4, k)}deg)`;
+    // ---- 6. The stinger: KABOOM, then the outro ----
+    const kbA = t >= 59.2 ? 1 - ease.inOut(seg(t, 59.62, 59.85)) : 0;
+    $('kaboom').style.visibility = kbA > 0 ? 'visible' : 'hidden';
+    if (kbA > 0) {
+      const k = ease.backSoft(seg(t, 59.2, 59.48));
+      $('kaboom').style.opacity = String(kbA);
+      $('kaboom').style.transform = `scale(${lerp(0.2, 1.1, k).toFixed(4)}) rotate(${lerp(-20, -4, k).toFixed(3)}deg)`;
     }
-    show('outro', !!inScene('outro', t));
-    $('outro').style.opacity = String(seg(t, 59.6, 59.85));
+    place('outro', within('outro', t) ? ease.inOut(seg(t, 59.55, 59.9)) : 0);
 
     // Flashes: the card slam and the boom.
-    $('flash').style.opacity = String(Math.max(0.55 * (1 - seg(t, 22.6, 22.82)) * (t >= 22.6 ? 1 : 0), 0.7 * (1 - seg(t, 59.2, 59.35)) * (t >= 59.2 ? 1 : 0)));
+    $('flash').style.opacity = String(Math.max(0.5 * (1 - ease.out(seg(t, 22.6, 22.9))) * (t >= 22.6 ? 1 : 0), 0.65 * (1 - ease.out(seg(t, 59.2, 59.42))) * (t >= 59.2 ? 1 : 0)));
 
-    // The big words
-    const c = CAPS.find(([a, b]) => t >= a && t < b);
-    const cap = $('cap');
-    $('shade').style.opacity = c ? '1' : '0';
-    if (c) {
-      if (cap.dataset.at !== String(c[0])) {
-        cap.innerHTML = c[2];
-        cap.dataset.at = String(c[0]);
+    // ---- The big words: glide up out of a soft blur, and cross-fade into the next ----
+    const caps = [$('cap'), $('cap2')];
+    let shade = 0;
+    const shown = new Set();
+    CAPS.forEach((c, i) => {
+      const [a, b, html] = c;
+      if (t < a - 0.01 || t >= b + 0.25) return;
+      const el = caps[i % 2];
+      shown.add(el);
+      if (el.dataset.at !== String(a)) {
+        el.innerHTML = html;
+        el.dataset.at = String(a);
       }
-      const k = ease.back(seg(t, c[0], c[0] + 0.2));
-      cap.style.opacity = String(seg(t, c[0], c[0] + 0.08) * (1 - seg(t, c[1] - 0.08, c[1])));
-      cap.style.transform = `scale(${lerp(1.2, 1, k)})`;
-    } else cap.style.opacity = '0';
+      const kin = ease.outQuint(seg(t, a, a + 0.42));
+      const kout = ease.inOut(seg(t, b - 0.05, b + 0.22));
+      const alpha = ease.smooth(seg(t, a, a + 0.2)) * (1 - kout);
+      el.style.opacity = alpha.toFixed(3);
+      el.style.transform = `translateY(${((1 - kin) * 30 - kout * 16).toFixed(2)}px) scale(${lerp(1.05, 1, kin).toFixed(4)})`;
+      const blur = (1 - seg(t, a, a + 0.28)) * 10 + kout * 6;
+      el.style.filter = blur > 0.05 ? `blur(${blur.toFixed(2)}px)` : 'none';
+      shade = Math.max(shade, ease.smooth(seg(t, a, a + 0.3)) * (1 - seg(t, b, b + 0.3)));
+    });
+    for (const el of caps) if (!shown.has(el)) el.style.opacity = '0';
+    $('shade').style.opacity = shade.toFixed(3);
 
-    // Subtitles: every line that's said, a phrase at a time (timed by length).
-    const sub = $('sub');
-    const v = VO.find((x) => t >= x.at - 0.05 && t < x.at + (window.VO_DUR?.[x.id] ?? DUR[x.id]) + 0.2);
-    if (v) {
-      const parts = phrases(v.text);
-      const total = parts.reduce((n, p) => n + p.length, 0);
-      const dur = window.VO_DUR?.[v.id] ?? DUR[v.id];
-      let acc = 0;
-      let i = 0;
-      for (; i < parts.length - 1; i++) {
-        acc += parts[i].length;
-        if (t - v.at < (acc / total) * dur) break;
+    // ---- Subtitles: a phrase at a time, cross-fading ----
+    const subs = [$('sub'), $('sub2')];
+    const used = new Set();
+    phraseTimes().forEach((p, i) => {
+      if (t < p.a - 0.12 || t >= p.b + 0.12) return;
+      const el = subs[i % 2];
+      used.add(el);
+      if (el.dataset.id !== p.key) {
+        el.innerHTML = (p.who === 'coach' ? '<span class="who coach">Lock In</span>' : p.who === 'sam' ? '<span class="who sam">Sam</span>' : '') + p.text;
+        el.dataset.id = p.key;
       }
-      const key = `${v.id}:${i}`;
-      if (sub.dataset.id !== key) {
-        sub.innerHTML = (v.who === 'coach' ? '<span class="who coach">Lock In</span>' : v.who === 'sam' ? '<span class="who sam">Sam</span>' : '') + parts[i];
-        sub.dataset.id = key;
-      }
-      sub.style.opacity = String(seg(t, v.at - 0.05, v.at + 0.05));
-    } else sub.style.opacity = '0';
+      const fin = p.first ? 0.18 : 0.1;
+      const fout = p.last ? 0.22 : 0.1;
+      const kin = ease.smooth(seg(t, p.a - fin * 0.6, p.a + fin * 0.4));
+      const kout = ease.smooth(seg(t, p.b - fout * 0.4, p.b + fout * 0.6));
+      el.style.opacity = (kin * (1 - kout)).toFixed(3);
+      const rise = p.first ? (1 - ease.outQuint(seg(t, p.a - 0.1, p.a + 0.25))) * 14 : 0;
+      el.style.transform = `translateX(-50%) translateY(${rise.toFixed(2)}px)`;
+    });
+    for (const el of subs) if (!used.has(el)) el.style.opacity = '0';
   };
 })();

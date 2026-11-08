@@ -12,11 +12,11 @@
       html, body { width: 1920px; height: 1080px; margin: 0; overflow: hidden; }
       body { position: relative; background: radial-gradient(120% 90% at 50% 40%, #22303c 0%, #101820 70%); font-family: var(--body); color: #fff; }
       iframe { position: absolute; left: 0; top: 0; border: 0; background: transparent; }
-      .layer { position: absolute; inset: 0; visibility: hidden; }
+      .layer { position: absolute; inset: 0; visibility: hidden; transform-origin: 0 0; will-change: transform, opacity; }
       #bomb { width: 1920px; height: 1080px; }
 
       /* Sam's screen, up close */
-      #close { background: radial-gradient(120% 90% at 50% 40%, #22303c 0%, #101820 70%); }
+      #close { background: none; }
       #bezel { position: absolute; left: 229px; top: 136px; width: 1462px; height: 924px; border-radius: 26px; background: #0b0f13; box-shadow: 0 0 0 2px #2c353d, 0 40px 90px rgba(0, 0, 0, 0.55); }
       #screen { position: absolute; left: 243px; top: 150px; width: 1280px; height: 800px; overflow: hidden; border-radius: 10px; background: #000; transform: scale(1.12); transform-origin: 0 0; }
       #mac { width: 1280px; height: 800px; }
@@ -76,12 +76,13 @@
 
       /* Words on top */
       .shade { position: absolute; inset: 0 0 auto 0; height: 250px; background: linear-gradient(rgba(16, 24, 32, 0.92) 0%, rgba(16, 24, 32, 0.55) 60%, rgba(16, 24, 32, 0) 100%); opacity: 0; }
-      #cap { position: absolute; left: 60px; right: 60px; top: 34px; text-align: center; color: #fff; font-family: var(--display); font-weight: 900; font-size: 104px; line-height: 1; letter-spacing: -0.005em; text-transform: uppercase; white-space: nowrap; text-shadow: 0 4px 0 rgba(0, 0, 0, 0.35); opacity: 0; transform-origin: 50% 50%; }
-      #cap y, #sub y { color: var(--yellow); }
-      #sub { position: absolute; left: 50%; bottom: 38px; max-width: 1500px; padding: 14px 30px 16px; border-radius: 18px; background: rgba(8, 12, 16, 0.82); color: #fff; font-weight: 700; font-size: 40px; line-height: 1.25; text-align: center; transform: translateX(-50%); opacity: 0; box-shadow: 0 10px 30px rgba(0, 0, 0, 0.3); }
-      #sub .who { display: inline-block; margin-right: 12px; padding: 3px 12px 5px; border-radius: 8px; font-family: var(--display); font-weight: 900; font-size: 32px; letter-spacing: 0.04em; vertical-align: 3px; }
-      #sub .who.coach { background: var(--yellow); color: var(--ink); }
-      #sub .who.sam { background: #4f7fe0; color: #fff; }
+      .cap { position: absolute; left: 60px; right: 60px; top: 34px; text-align: center; color: #fff; font-family: var(--display); font-weight: 900; font-size: 104px; line-height: 1; letter-spacing: -0.005em; text-transform: uppercase; white-space: nowrap; text-shadow: 0 4px 0 rgba(0, 0, 0, 0.35); opacity: 0; transform-origin: 50% 50%; }
+      .cap y, .sub y { color: var(--yellow); }
+      .cap, .sub { will-change: transform, opacity, filter; }
+      .sub { position: absolute; left: 50%; bottom: 38px; max-width: 1500px; padding: 14px 30px 16px; border-radius: 18px; background: rgba(8, 12, 16, 0.82); color: #fff; font-weight: 700; font-size: 40px; line-height: 1.25; text-align: center; transform: translateX(-50%); opacity: 0; box-shadow: 0 10px 30px rgba(0, 0, 0, 0.3); }
+      .sub .who { display: inline-block; margin-right: 12px; padding: 3px 12px 5px; border-radius: 8px; font-family: var(--display); font-weight: 900; font-size: 32px; letter-spacing: 0.04em; vertical-align: 3px; }
+      .sub .who.coach { background: var(--yellow); color: var(--ink); }
+      .sub .who.sam { background: #4f7fe0; color: #fff; }
       #flash { position: absolute; inset: 0; background: #fff; opacity: 0; }
       #fade { position: absolute; inset: 0; background: #000; opacity: 1; }
     </style>
@@ -168,8 +169,10 @@
 
 
     <div class="shade" id="shade"></div>
-    <div id="cap"></div>
-    <div id="sub"></div>
+    <div class="cap" id="cap"></div>
+    <div class="cap" id="cap2"></div>
+    <div class="sub" id="sub"></div>
+    <div class="sub" id="sub2"></div>
     <div id="flash"></div>
     <svg id="kaboom" viewBox="-750 -550 1500 1100" aria-hidden="true">
       <polygon id="kOut" fill="#ffcf00" stroke="#e5202e" stroke-width="26" stroke-linejoin="round" />

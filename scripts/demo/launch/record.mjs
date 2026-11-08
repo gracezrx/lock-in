@@ -30,7 +30,11 @@ for (let i = 2; i < process.argv.length; i++) {
   const next = process.argv[i + 1];
   args[m[1]] = next === undefined || next.startsWith('--') ? '1' : process.argv[++i];
 }
-const FPS = 30;
+// 60 frames a second, each the blend of 2 moments 1/240 s apart: a light motion blur (a
+// quarter-frame shutter), so fast moves read as smooth rather than as steps or double images.
+const FPS = Number(args.fps ?? 60);
+const SUB = Number(args.sub ?? 2);
+const ENV_RATE = 30;
 const W = 1920;
 const H = 1080;
 const out = resolve(args.out ?? join(root, 'docs/launch.mp4'));
@@ -82,7 +86,7 @@ for (const f of ['n1', 's1', 'n2', 'n3', 'c1', 'c2', 'n4', 'n5', 'n6', 's2', 'n7
   voices[f] = s;
   VO_DUR[f] = s.length / SR;
   // Loudness, 30 times a second (the coach's bars move with it).
-  const step = SR / FPS;
+  const step = SR / ENV_RATE;
   const env = [];
   for (let i = 0; i < s.length; i += step) {
     let sum = 0;
@@ -157,18 +161,26 @@ if (args.stills) {
   process.exit(0);
 }
 
-// ---- frames, one encoded file per chunk (cut at the scene changes) ----
+// ---- frames, one encoded file per chunk ----
 const cuts = [0, 10, 24.3, 27, 34.4, 39.6, 41.4, 49.6, 56, FILM.LENGTH];
-const chunks = cuts.slice(0, -1).map((a, i) => [Math.round(a * FPS), Math.round(cuts[i + 1] * FPS)]);
+// Frame numbers here count the moments drawn (FPS x SUB a second).
+const chunks = cuts.slice(0, -1).map((a, i) => [Math.round(a * FPS * SUB), Math.round(cuts[i + 1] * FPS * SUB)]);
 const only = args.only !== undefined ? Number(args.only) : null;
 for (const [i, [f0, f1]] of chunks.entries()) {
   const file = join(work, `chunk-${String(i).padStart(2, '0')}.mp4`);
   if (only !== null ? i !== only : existsSync(file) && args.fresh === undefined) continue;
   const tmp = join(work, `chunk-${String(i).padStart(2, '0')}.part.mp4`);
-  const ff = spawn('ffmpeg', ['-y', '-loglevel', 'error', '-f', 'image2pipe', '-framerate', String(FPS), '-c:v', 'mjpeg', '-i', '-', '-c:v', 'libx264', '-preset', 'medium', '-crf', '18', '-pix_fmt', 'yuv420p', '-r', String(FPS), tmp], { stdio: ['pipe', 'inherit', 'inherit'] });
+  const blend = SUB > 1 ? ['-vf', `tmix=frames=${SUB},fps=${FPS}`] : [];
+  const ff = spawn('ffmpeg', ['-y', '-loglevel', 'error', '-f', 'image2pipe', '-framerate', String(FPS * SUB), '-c:v', 'mjpeg', '-i', '-', ...blend, '-c:v', 'libx264', '-preset', 'medium', '-crf', '18', '-pix_fmt', 'yuv420p', '-r', String(FPS), tmp], { stdio: ['pipe', 'inherit', 'inherit'] });
   const done = new Promise((r) => ff.on('exit', r));
   for (let f = f0; f < f1; f++) {
-    await page.evaluate((t) => window.render(t), f / FPS);
+    // ffmpeg's tmix blends drawn moments SUB*k-SUB+1 .. SUB*k into output frame k (the fps filter
+    // keeps every SUB-th), so moment f belongs to frame ceil(f / SUB), spread over the quarter
+    // frame before it.
+    const k = Math.ceil(f / SUB);
+    const j = SUB * k - f;
+    const shutter = SUB > 1 ? ((0.25 / FPS) * j) / (SUB - 1) : 0;
+    await page.evaluate((t) => window.render(t), Math.max(0, k / FPS - shutter));
     const jpg = await page.screenshot({ type: 'jpeg', quality: 92 });
     if (!ff.stdin.write(jpg)) await new Promise((r) => ff.stdin.once('drain', r));
   }
@@ -176,7 +188,7 @@ for (const [i, [f0, f1]] of chunks.entries()) {
   const code = await done;
   if (code !== 0) throw new Error(`ffmpeg failed on chunk ${i}`);
   renameSync(tmp, file);
-  console.log(`chunk ${i}: ${(f1 - f0) / FPS}s`);
+  console.log(`chunk ${i}: ${((f1 - f0) / (FPS * SUB)).toFixed(2)}s`);
 }
 await browser.close();
 server.close();
@@ -399,10 +411,13 @@ function musicTrack(F, n) {
       }
     }
   }
-  // Out at the card slam (a beat of silence), and dead at the boom.
+  // Eases in at the start; out at the card slam (a beat of silence, softly back), dead at the boom.
   for (let i = 0; i < n; i++) {
     const t = i / SR;
-    if ((t >= 22.6 && t < 22.95) || t >= end) x.buf[i] = 0;
+    let g = Math.min(1, Math.max(0, (t - start) / 1.2));
+    if (t >= 22.6 && t < 23.4) g *= Math.max(0, (t - 22.95) / 0.45);
+    if (t >= end) g = 0;
+    x.buf[i] *= g;
   }
   return x.buf;
 }
