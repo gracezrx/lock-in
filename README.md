@@ -367,6 +367,8 @@ npm run demo:bomb          # the vertical Lock In bomb clip, docs/bomb-demo.mp4 
 npm run demo:bomb:wide     # the same clip in landscape for X/Twitter, docs/bomb-demo-wide.mp4
 npm run demo:launch        # the launch film (about a minute), docs/launch.mp4 (AI voices) and docs/launch-your-voice.mp4
                            # (no narrator); python3 scripts/demo/launch/tts.py re-speaks the lines in film.js
+npm run demo:walkthrough   # a screen-recording-style walkthrough to talk over on camera, docs/walkthrough.mp4, and
+                           # docs/walkthrough-prompter.mp4 with your lines on top (scripts/demo/walkthrough)
 ```
 
 The demo is a scripted scene (`scripts/demo/stage.html`) that uses the real opening animation (`src/renderer/intro.ts`) and the real card from the extension, so it stays in step with the app. The opening animation plays once each time Lock In starts; click the logo to see it again.

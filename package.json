@@ -19,6 +19,7 @@
     "demo:bomb": "node scripts/demo/bomb/record.mjs",
     "demo:bomb:wide": "node scripts/demo/bomb/record.mjs --wide",
     "demo:launch": "node scripts/demo/launch/record.mjs",
+    "demo:walkthrough": "node scripts/demo/launch/record.mjs --film walkthrough && node scripts/demo/launch/record.mjs --film walkthrough --prompter",
     "package:mac": "npm run helper && npm run build && node scripts/package-mac.mjs"
   },
   "dependencies": {
