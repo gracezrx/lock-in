@@ -27,6 +27,10 @@
       </div>
     </section>
     <script>
+      // Other films can change the words: ?name=…&meta=…&line=…
+      const q = new URLSearchParams(location.search);
+      for (const [key, sel] of [['name', '.card-name'], ['meta', '.card-meta'], ['line', '.line']]) if (q.get(key)) document.querySelector(sel).textContent = q.get(key);
+      if (q.get('goal')) document.querySelector('.opt.primary').lastChild.textContent = `Lock in on “${q.get('goal')}”`;
       const lerp = (a, b, k) => a + (b - a) * k;
       const out = (k) => 1 - Math.pow(1 - k, 3);
       // The card's slam: big and tilted, overshoots, settles with a little shake.

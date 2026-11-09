@@ -1,9 +1,12 @@
-// Records the launch film (1920x1080, 60 fps, about a minute) with its sound:
+// Records a film (1920x1080, 60 fps) with its sound. The launch film (this folder):
 //   docs/launch.mp4             the AI voices (narrator, the coach, Sam)
 //   docs/launch-your-voice.mp4  the same film without the narrator, to record your own voice over
+// and, with --film walkthrough (../walkthrough), the walkthrough to talk over with your camera on:
+//   docs/walkthrough.mp4           the screen recording, with the app's own sounds
+//   docs/walkthrough-prompter.mp4  (--prompter) the same with your lines on top and a countdown
 //
-//   python3 scripts/demo/launch/tts.py      (once: speaks the lines into scripts/demo/launch/vo/)
-//   node scripts/demo/launch/record.mjs
+//   python3 scripts/demo/launch/tts.py [walkthrough]   (once: speaks the lines into <film>/vo/)
+//   node scripts/demo/launch/record.mjs [--film walkthrough] [--prompter]
 //   node scripts/demo/launch/record.mjs --stills 3,12,23   (just those moments, as JPEGs)
 //   node scripts/demo/launch/record.mjs --only 4          (render one chunk again, then join)
 //
@@ -32,14 +35,17 @@ for (let i = 2; i < process.argv.length; i++) {
 }
 // 60 frames a second, each the blend of 2 moments 1/240 s apart: a light motion blur (a
 // quarter-frame shutter), so fast moves read as smooth rather than as steps or double images.
-const FPS = Number(args.fps ?? 60);
-const SUB = Number(args.sub ?? 2);
+const FILM_NAME = args.film ?? 'launch';
+const filmDir = resolve(here, '..', FILM_NAME);
+const PROMPTER = args.prompter !== undefined;
+// The prompter version is only for you to read from: 30 fps is plenty.
+const FPS = Number(args.fps ?? (PROMPTER ? 30 : 60));
+const SUB = Number(args.sub ?? (PROMPTER ? 1 : 2));
 const ENV_RATE = 30;
 const W = 1920;
 const H = 1080;
-const out = resolve(args.out ?? join(root, 'docs/launch.mp4'));
-const outMine = out.replace(/\.mp4$/, '-your-voice.mp4');
-const work = resolve(args.work ?? join(root, 'release/launch-work'));
+const out = resolve(args.out ?? join(root, `docs/${FILM_NAME}${PROMPTER ? '-prompter' : ''}.mp4`));
+const work = resolve(args.work ?? join(root, `release/${FILM_NAME}${PROMPTER ? '-prompter' : ''}-work`));
 mkdirSync(work, { recursive: true });
 
 // ---- the voices ----
@@ -75,14 +81,14 @@ function resample({ rate, s }) {
   }
   return o;
 }
-const VO_DIR = join(here, 'vo');
+const VO_DIR = join(filmDir, 'vo');
 const voices = {};
 const VO_DUR = {};
 const VO_ENV = {};
-const LINE_IDS = [...readFileSync(join(here, 'film.js'), 'utf8').matchAll(/\{ id: '(\w+)', who: '\w+', at: [\d.]+, text: '/g)].map((m) => m[1]);
+const LINE_IDS = [...readFileSync(join(filmDir, 'film.js'), 'utf8').matchAll(/\{ id: '(\w+)', who: '\w+', at: [\d.]+, text: '/g)].map((m) => m[1]);
 for (const f of LINE_IDS) {
   const file = join(VO_DIR, `${f}.wav`);
-  if (!existsSync(file)) throw new Error(`Missing ${file}: run python3 scripts/demo/launch/tts.py first`);
+  if (!existsSync(file)) throw new Error(`Missing ${file}: run python3 scripts/demo/launch/tts.py ${FILM_NAME === 'launch' ? '' : FILM_NAME} first`);
   const s = resample(readWav(file));
   voices[f] = s;
   VO_DUR[f] = s.length / SR;
@@ -102,6 +108,7 @@ for (const f of LINE_IDS) {
 const TYPES = { '.html': 'text/html', '.js': 'text/javascript', '.css': 'text/css', '.svg': 'image/svg+xml', '.png': 'image/png', '.jpg': 'image/jpeg', '.woff2': 'font/woff2' };
 function fileFor(path) {
   if (path.startsWith('/launch/')) return join(here, path.slice(8));
+  if (path.startsWith('/film/')) return join(filmDir, path.slice(6));
   if (path.startsWith('/scene/')) return join(bombDir, path.slice(7));
   if (path.startsWith('/fonts/')) return join(root, 'dist/renderer/fonts', path.slice(7));
   if (path === '/icon.png') return join(root, 'assets/icon.png');
@@ -125,14 +132,21 @@ const browser = await chromium.launch();
 const page = await browser.newPage({ viewport: { width: W, height: H }, deviceScaleFactor: 1 });
 const errors = [];
 page.on('pageerror', (e) => errors.push(String(e)));
-const q = new URLSearchParams({ wide: '1', me: 'Grace', them: 'Sam', line: 'Your investors can hear you scrolling.', goal: 'Investor update', mygoal: 'Pitch deck' });
-await page.goto(`http://127.0.0.1:${port}/launch/index.html?${q}`, { waitUntil: 'load' });
+// Who's who in the bomb scenes: the launch film bombs Sam; in the walkthrough, Sam bombs you.
+const QUERY = {
+  launch: { wide: '1', me: 'Grace', them: 'Sam', line: 'Your investors can hear you scrolling.', goal: 'Investor update', mygoal: 'Pitch deck' },
+  walkthrough: { me: 'Sam', them: 'Grace', pronoun: 'she', crew: 'Friends', line: 'Your investors can hear you scrolling.', goal: 'Investor update', mygoal: 'Pitch deck' },
+}[FILM_NAME] ?? {};
+const q = new URLSearchParams({ ...QUERY, ...(PROMPTER ? { prompter: '1' } : {}) });
+await page.goto(`http://127.0.0.1:${port}/film/index.html?${q}`, { waitUntil: 'load' });
 await page.waitForFunction(() => {
+  if (window.ready) return window.ready();
   const b = document.getElementById('bomb').contentWindow;
   const bm = b?.document.getElementById('macFrame')?.contentWindow;
   return !!(window.render && b?.render && bm?.render && b.document.getElementById('phoneFrame')?.contentWindow?.render && document.getElementById('mac').contentWindow?.render && document.getElementById('coach').contentWindow?.render);
 }, null, { timeout: 30_000 });
-await page.evaluate(async ({ dur, env }) => {
+const WARM = await page.evaluate(() => window.FILM.WARM ?? [1, 3, 5, 8, 12, 14, 18, 23, 30, 31, 34, 38, 42, 45, 49, 52, 58, 63, 66]);
+await page.evaluate(async ({ dur, env, warm }) => {
   window.VO_DUR = dur;
   window.VO_ENV = env;
   const docs = [];
@@ -141,13 +155,13 @@ await page.evaluate(async ({ dur, env }) => {
     for (const f of d.querySelectorAll('iframe')) if (f.contentDocument) walk(f.contentDocument);
   };
   walk(document);
-  for (const t of [1, 3, 5, 8, 12, 14, 18, 23, 30, 31, 34, 38, 42, 45, 49, 52, 58, 63, 66]) window.render(t);
+  for (const t of warm) window.render(t);
   for (const d of docs) {
     await Promise.all(['900 40px "Big Shoulders Display"', '800 40px "Big Shoulders Display"', '400 16px "Public Sans"', '600 16px "Public Sans"', '700 16px "Public Sans"'].map((f) => d.fonts.load(f).catch(() => null)));
     await d.fonts.ready;
     await Promise.all([...d.images].map((i) => (i.complete ? null : new Promise((r) => (i.onload = i.onerror = r)))));
   }
-}, { dur: VO_DUR, env: VO_ENV });
+}, { dur: VO_DUR, env: VO_ENV, warm: WARM });
 const FILM = await page.evaluate(() => window.FILM);
 
 if (args.stills) {
@@ -163,7 +177,7 @@ if (args.stills) {
 }
 
 // ---- frames, one encoded file per chunk ----
-const cuts = [0, 5.35, 12.2, 21.2, 30.5, 39.65, 48.7, 56.85, 61.9, FILM.LENGTH];
+const cuts = FILM.CUTS ?? [0, 5.35, 12.2, 21.2, 30.5, 39.65, 48.7, 56.85, 61.9, FILM.LENGTH];
 // Frame numbers here count the moments drawn (FPS x SUB a second).
 const chunks = cuts.slice(0, -1).map((a, i) => [Math.round(a * FPS * SUB), Math.round(cuts[i + 1] * FPS * SUB)]);
 const only = args.only !== undefined ? Number(args.only) : null;
@@ -199,16 +213,18 @@ writeFileSync(join(work, 'chunks.txt'), chunks.map((_, i) => `file 'chunk-${Stri
 const video = join(work, 'video.mp4');
 execFileSync('ffmpeg', ['-y', '-loglevel', 'error', '-f', 'concat', '-safe', '0', '-i', join(work, 'chunks.txt'), '-c', 'copy', video]);
 
-// ---- sound ----
-const N = Math.ceil(FILM.LENGTH * SR);
+// ---- sound (in film time; the prompter's countdown goes in front at the end) ----
+const PRE = FILM.PRE ?? 0;
+const PACE = FILM.PACE ?? 1;
+const N = Math.ceil((FILM.LENGTH - PRE) * SR);
 const bombWav = join(work, 'bomb.wav');
 execFileSync('ffmpeg', ['-y', '-loglevel', 'error', '-i', join(root, 'docs/bomb-demo-wide.mp4'), '-vn', '-ac', '1', '-ar', String(SR), '-c:a', 'pcm_s16le', bombWav]);
 const bombAudio = readWav(bombWav).s;
 
-function voTrack(withNarrator) {
+function voTrack(skip) {
   const buf = new Float32Array(N);
   for (const v of FILM.VO) {
-    if (!withNarrator && v.who === 'narrator') continue;
+    if (skip.includes(v.who)) continue;
     const s = voices[v.id];
     const g = v.who === 'coach' ? 1.0 : v.who === 'sam' ? 0.85 : 0.95;
     const o = Math.round(v.at * SR);
@@ -229,14 +245,14 @@ for (const [at, from, len] of FILM.BOMB_AUDIO) {
   }
 }
 
-function mix(withNarrator) {
-  const vo = voTrack(withNarrator);
+function mix(skip) {
+  const vo = voTrack(skip);
   const buf = new Float32Array(N);
   // The music ducks under the voices (all of them, so both cuts have the same music).
   let duck = 1;
   for (let i = 0; i < N; i++) {
     const t = i / SR;
-    const speaking = FILM.VO.some((v) => t >= v.at - 0.08 && t < v.at + VO_DUR[v.id] + 0.12);
+    const speaking = FILM.VO.some((v) => t >= v.at - 0.08 && t < v.at + VO_DUR[v.id] * (v.who === 'you' ? PACE : 1) + 0.12);
     const target = speaking ? 0.42 : 1;
     duck += (target - duck) * (target < duck ? 0.0009 : 0.00012);
     let g = duck;
@@ -250,12 +266,23 @@ function mix(withNarrator) {
   }
   const gn = peak ? 0.89 / peak : 1;
   for (let i = 0; i < N; i++) buf[i] *= gn;
-  return buf;
+  if (!PRE) return buf;
+  // The countdown: a beep a second, the last one higher.
+  const pre = Math.round(PRE * SR);
+  const all = new Float32Array(pre + N);
+  for (let b = 0; b < Math.round(PRE); b++) {
+    const f = b === Math.round(PRE) - 1 ? 1320 : 880;
+    for (let i = 0; i < 0.12 * SR; i++) all[b * SR + i] = Math.sin((2 * Math.PI * f * i) / SR) * 0.35 * Math.min(1, i / 200, (0.12 * SR - i) / 400);
+  }
+  all.set(buf, pre);
+  return all;
 }
 
-for (const [file, narr] of [[out, true], [outMine, false]]) {
-  const wav = join(work, narr ? 'mix.wav' : 'mix-mine.wav');
-  writeFileSync(wav, toWav(mix(narr)));
+const MIXES = FILM.MIXES ?? [{ suffix: '', skip: [] }, { suffix: '-your-voice', skip: ['narrator'] }];
+for (const { suffix, skip } of PROMPTER ? MIXES.slice(0, 1) : MIXES) {
+  const file = out.replace(/\.mp4$/, `${PROMPTER ? '' : suffix}.mp4`);
+  const wav = join(work, `mix${suffix}.wav`);
+  writeFileSync(wav, toWav(mix(skip)));
   mkdirSync(dirname(file), { recursive: true });
   const tmp = file.replace(/\.mp4$/, '.part.mp4');
   // Tame the booms, then bring it up to social-video loudness (-14 LUFS).
@@ -359,6 +386,7 @@ function sfxTrack(F, n) {
         for (let i = 0; i < 22; i++) x.add(at + 0.08 + ((i * 0.041) % 0.8), 0.012, (_t, k) => x.rand() * 0.25 * (1 - k));
         break;
       case 'flick': x.sweep(at - 0.02, 0.13, 3600, 1500, 0.28); break;
+      case 'alert': x.tone(at, 0.3, 740, 0.16, { decay: 9 }); x.tone(at + 0.09, 0.4, 554, 0.14, { decay: 7 }); break;
       case 'tick': x.tone(at, 0.09, 2637, 0.14, { decay: 30 }); x.tone(at + 0.05, 0.09, 3520, 0.08, { decay: 34 }); break;
       case 'scratch':
         // The needle dragged back and forth across the record.
