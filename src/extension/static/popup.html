@@ -1,0 +1,43 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <title>Lock In Extended</title>
+    <link rel="stylesheet" href="popup.css" />
+  </head>
+  <body>
+    <main class="panel" id="panel" aria-label="Lock In Extended">
+      <header class="top">
+        <button class="icon-btn back" id="backBtn" type="button" aria-label="Back" hidden>
+          <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M15 6l-6 6 6 6"/></svg>
+        </button>
+        <div class="brand" id="brand">
+          <img class="mark" src="icons/icon48.png" alt="" />
+          <span id="brandText">Lock In</span>
+        </div>
+        <div class="top-right">
+          <button class="chip" id="muteChip" type="button" title="Unmute" hidden></button>
+          <span class="chip link" id="linkChip"></span>
+          <button class="icon-btn" id="settingsBtn" type="button" title="Settings" aria-label="Settings">
+            <svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="3.2"/><path d="M19.4 13.5a7.6 7.6 0 0 0 0-3l2-1.6-2-3.4-2.4 1a7.7 7.7 0 0 0-2.6-1.5L14 2.5h-4l-.4 2.5A7.7 7.7 0 0 0 7 6.5l-2.4-1-2 3.4 2 1.6a7.6 7.6 0 0 0 0 3l-2 1.6 2 3.4 2.4-1a7.7 7.7 0 0 0 2.6 1.5l.4 2.5h4l.4-2.5a7.7 7.7 0 0 0 2.6-1.5l2.4 1 2-3.4z"/></svg>
+          </button>
+        </div>
+      </header>
+
+      <div class="scroll" id="main">
+        <section class="alerts" id="alerts" hidden></section>
+        <section class="hero" id="hero"></section>
+        <section class="site" id="site" hidden></section>
+        <section class="today" id="today"></section>
+        <section class="block" id="todos"></section>
+        <section class="block" id="goals"></section>
+        <section class="block" id="crew"></section>
+      </div>
+
+      <div class="scroll" id="settings" hidden></div>
+
+      <footer class="foot" id="foot"></footer>
+    </main>
+    <script src="popup.js"></script>
+  </body>
+</html>

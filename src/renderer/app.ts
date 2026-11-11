@@ -1660,7 +1660,7 @@ async function renderSettingsPage(): Promise<void> {
         h('p', null, 'Works in Chrome, Arc, Brave and Edge. Press the button: your browser opens on its extensions page and Finder shows the extension folder. Turn on Developer mode (top right) and drag the folder onto the page. (Or choose Load unpacked, press ⌘⇧G and paste: the folder’s address is already copied.)'),
         h('p', null, s.extensionConnected ? 'Connected.' : 'Not connected yet. Keep Lock In running and the extension connects within 30 seconds.'),
         s.extensionOutdated
-          ? h('p', { class: 'sheet-error' }, 'Lock In was updated and the extension needs one reload: open ', h('code', null, 'chrome://extensions'), ' and press the reload arrow ↻ on Lock In. After this, updates reload it on their own.')
+          ? h('p', { class: 'sheet-error' }, 'Lock In was updated and the extension needs one reload: open ', h('code', null, 'chrome://extensions'), ' and press the reload arrow ↻ on Lock In Extended. After this, updates reload it on their own.')
           : null,
       ].filter(Boolean) as Node[],
       s.extensionConnected ? undefined : h('button', { class: 'btn btn-small', type: 'button', onclick: () => void api.invoke('setup:addExtension') }, mac ? 'Add to browser' : 'Show the folder'),

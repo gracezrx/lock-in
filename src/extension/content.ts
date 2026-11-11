@@ -1,14 +1,12 @@
 // Tells the extension whether a video or audio element is playing in this frame.
 (() => {
-  let last = null;
+  let last: boolean | null = null;
   const report = () => {
-    const playing = Array.from(document.querySelectorAll('video, audio')).some(
-      (m) => !m.paused && !m.ended && m.readyState > 2,
-    );
+    const playing = Array.from(document.querySelectorAll<HTMLMediaElement>('video, audio')).some((m) => !m.paused && !m.ended && m.readyState > 2);
     if (playing === last) return;
     last = playing;
     try {
-      chrome.runtime.sendMessage({ type: 'media', playing });
+      void chrome.runtime.sendMessage({ type: 'media', playing });
     } catch {
       /* extension reloaded */
     }

@@ -41,7 +41,7 @@ Then, inside the app:
    - Everything else (work apps and sites, the coach's style, check-ins) starts from sensible defaults and lives in Settings and on the Coach page.
 2. **Follow *Settings → Permissions*:**
    - Allow **Accessibility**. While running from source, macOS lists the app as **Electron**; turn it on there.
-   - Load the browser extension: open `chrome://extensions`, turn on **Developer mode**, click **Load unpacked**, and pick the `extension` folder in this project.
+   - Load the browser extension: `npm run build` puts it in `dist/extension`. Open `chrome://extensions`, turn on **Developer mode**, click **Load unpacked**, and pick that folder. (It's [Lock In Extended](#lock-in-extended-the-chrome-extension), which also works without the Mac app.)
    - Allow the **microphone** if you want to answer the coach out loud.
 3. **Add keys (optional)** in *Settings → Keys*:
    - A [Claude API key](https://console.anthropic.com/) gives live, specific coach lines, spoken back-and-forth, and labeling of sites it hasn't seen.
@@ -159,6 +159,17 @@ A row counts as done today when Lock In saw it open earlier and it is now ticked
 | Weekly review | Sunday 5:00 pm | Focus hours and tasks done this week |
 
 Times, days and intervals are editable, and you can add your own (with an optional "Lock in" button). Timed routines fire once a day if you are at the computer within 90 minutes of their time. Repeating ones count only active minutes and wait until a focus session ends. A real break (five minutes or more away) starts the stretch and eye-break counts over, so they never greet you as you sit back down. Water, stretching, eye breaks, lunch, the kickoff, the midday check and the weekly review wait for a natural pause (see *How Lock In reaches out*). With a break goal, the stretch reminder steps aside for it. **Pomodoro**: pick *4×25* on the home screen for four 25-minute rounds with 5-minute breaks.
+
+## Lock In Extended: the Chrome extension
+
+Lock In in your Chrome toolbar. Click the padlock and the control panel drops down: lock in on something for 25, 50 or 90 minutes, watch the clock and the drift meter, take five, mute, end. Mark the site you're on as work or a distraction, tick off to-dos, count down goals, see your crew and bomb whoever is on Reddit. Settings has your coach (all four personalities), how patient it is, its voice (Chrome's voices), your distraction list, a private calendar link for quiet in meetings, and the link to the Mac app.
+
+It works two ways, and switches by itself:
+
+- **On its own** (no Mac app, or not a Mac): the same engine as the Mac app runs on Chrome's tabs. The same drift ladder: a corner card, then it talks, then a card covers the page until you choose, then the site is blocked until the session ends. Crews work too (the same relay and encryption as the Mac app, so Chrome and Mac friends share a crew).
+- **Linked to Lock In for Mac**: the moment the Mac app is open, the extension links up over `127.0.0.1` and becomes the same you: your profile and coach, site labels, crew (as the same member, not a second one), to-dos, goals and today's meetings. The Mac does the coaching (it sees every app, not just Chrome) and the panel drives it. A session running in Chrome moves to the Mac; sessions you ran in Chrome alone go into your Mac history, and to-dos you added there go onto your Mac's list. Quit the Mac app mid-session and Chrome picks the session up where it was.
+
+Build it with `npm run build` (it lands in `dist/extension`), or `npm run extension:zip` for the Chrome Web Store upload (`release/Lock-In-Extended-<version>.zip`).
 
 ## Lock in with friends
 
@@ -342,7 +353,8 @@ src/
   phone/                the phone page your Mac serves over Wi-Fi
   shared/               types and role templates
 native/mac-helper/      Swift sensor: front app, window title, open document, mic-in-use
-extension/              Chrome Manifest V3 extension
+src/extension/          Lock In Extended (Chrome, Manifest V3): the service worker, the toolbar panel, the
+                        standalone engine on Chrome's tabs (solo.ts), the link to the Mac app (link.ts), page cards
 test/                   engine, coach and bridge tests
 ```
 
@@ -353,7 +365,7 @@ test/                   engine, coach and bridge tests
 - To-do titles stay on your Mac unless you have a Claude key, in which case the top task's title is included when the coach writes a line. For big goals, the coach also sees each goal's title, reason and list, and (once a day) the names and projects you keep coming back to, with a few of the to-do, session and meeting titles they came from.
 - Only a small context (app name, site, page title, your goal) goes to Claude, with emails and numbers stripped. *Keep titles on this Mac* sends the site name only.
 - Incognito windows, password managers and banking sites are logged as "private" with no details.
-- The extension talks to the app over `127.0.0.1` and the app accepts only browser-extension connections, not web pages.
+- The extension talks to the app over `127.0.0.1` and the app accepts only browser-extension connections, not web pages. On its own, Lock In Extended keeps everything in Chrome's local storage; see [its privacy policy](docs/extension-privacy.md).
 - *Settings → Your data* backs up, restores or deletes everything.
 
 ## Development
@@ -386,7 +398,8 @@ Packaging: `npm run dist` builds an unsigned `.dmg` with electron-builder. For o
 ## Troubleshooting
 
 - **"Window sensor off"**: run `npm run helper` and check *Settings → Activity log*. Accessibility must be on for **Electron** (dev) or **Lock In** (packaged).
-- **The extension doesn't do something new after an update**: open `chrome://extensions` and press the reload arrow on Lock In once (Settings says when). From 0.2.0 on it reloads itself after updates.
+- **The extension doesn't do something new after an update**: open `chrome://extensions` and press the reload arrow on Lock In Extended once (Settings says when). From 0.2.0 on it reloads itself after updates.
+- **Two Lock In extensions in Chrome**: before 1.0 the extension was called "Lock In" and lived in this project's `extension` folder. Remove that one and keep Lock In Extended (from `dist/extension` or the Chrome Web Store).
 - **"Browser not connected"**: make sure the extension is loaded and enabled, then click its toolbar icon and press *Reconnect*. Port 47615 must be free.
 - **Talking says "Voice is off"**: the message says why. Usually the ElevenLabs key is missing *ElevenAgents: Write*; edit the key at elevenlabs.io and paste it again. If the mic never opens, allow Lock In under *System Settings → Privacy and Security → Microphone*.
 - **No voice**: check the volume cap in *Coach*, quiet hours, and whether you're in a call. *Play a test line* checks the voice on its own.

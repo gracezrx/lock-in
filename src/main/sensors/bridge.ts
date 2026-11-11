@@ -30,6 +30,8 @@ interface Conn {
   browser: string;
   /** The extension's version, from its hello. */
   version?: string;
+  /** Lock In Extended (1.0+) can run the panel's actions here and wants the live state. */
+  caps: Set<string>;
   tab: TabState | null;
   focused: boolean;
   updatedAt: number;
@@ -53,8 +55,31 @@ export class Bridge {
 
   private reloadAsked = new Set<string>();
 
-  /** `bundled` is the version of the extension that ships with this Lock In. */
-  constructor(private log: (msg: string) => void, private onChange: () => void, private bundled: () => string | null = () => null) {}
+  /**
+   * `bundled` is the version of the extension that ships with this Lock In. `onCall` runs what
+   * Lock In Extended's panel asks for (the same actions as the Mac's own panel); it throws when
+   * the action isn't one the extension may use.
+   */
+  constructor(
+    private log: (msg: string) => void,
+    private onChange: () => void,
+    private bundled: () => string | null = () => null,
+    private onCall: (method: string, args: unknown[]) => Promise<unknown> = async () => {
+      throw new Error('Not available.');
+    },
+  ) {}
+
+  /** The live state for every extension that wants it (Lock In Extended's panel). */
+  pushState(state: unknown): void {
+    const text = JSON.stringify({ type: 'state', state });
+    for (const c of this.conns) if (c.caps.has('state') && c.ws.readyState === WebSocket.OPEN) c.ws.send(text);
+  }
+
+  /** Is a Lock In Extended (with its own panel) connected? */
+  get extended(): boolean {
+    for (const c of this.conns) if (c.caps.has('call') && c.ws.readyState === WebSocket.OPEN) return true;
+    return false;
+  }
 
   /** A connected extension older than the one on disk (it needs a reload in chrome://extensions). */
   get outdated(): boolean {
@@ -86,7 +111,7 @@ export class Bridge {
     }
     this.wss.on('error', (e) => this.log(`[bridge] ${e.message}`));
     this.wss.on('connection', (ws) => {
-      const conn: Conn = { ws, browser: 'browser', tab: null, focused: false, updatedAt: Date.now() };
+      const conn: Conn = { ws, browser: 'browser', caps: new Set(), tab: null, focused: false, updatedAt: Date.now() };
       this.conns.add(conn);
       this.onChange();
       ws.on('message', (raw) => this.handle(conn, String(raw)));
@@ -159,6 +184,7 @@ export class Bridge {
       case 'hello': {
         conn.browser = String(msg.browser ?? 'browser');
         conn.version = String(msg.version ?? '0');
+        conn.caps = new Set(Array.isArray(msg.caps) ? msg.caps.map(String).slice(0, 10) : []);
         const want = this.bundled();
         // Lock In was updated: an extension that knows how reloads itself from disk (once per version).
         if (want && newerVersion(want, conn.version) && !newerVersion('0.2.0', conn.version) && !this.reloadAsked.has(conn.version)) {
@@ -202,6 +228,20 @@ export class Bridge {
       case 'ping':
         conn.ws.send(JSON.stringify({ type: 'pong' }));
         break;
+      case 'call': {
+        // Lock In Extended's panel: run the action, answer with its result (or why not).
+        const id = String(msg.id ?? '');
+        const method = String(msg.method ?? '');
+        const args = Array.isArray(msg.args) ? msg.args : [];
+        const reply = (body: Record<string, unknown>) => {
+          if (conn.ws.readyState === WebSocket.OPEN) conn.ws.send(JSON.stringify({ type: 'result', id, ...body }));
+        };
+        Promise.resolve()
+          .then(() => this.onCall(method, args))
+          .then((value) => reply({ ok: true, value: value ?? null }))
+          .catch((e: Error) => reply({ ok: false, error: e?.message || 'That did not work.' }));
+        break;
+      }
     }
   }
 }

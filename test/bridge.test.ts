@@ -52,3 +52,53 @@ test('bridge: rejects web pages, accepts the extension, tracks the tab, round-tr
     bridge.stop();
   }
 });
+
+test('bridge: Lock In Extended can call the app and gets its state pushed', async () => {
+  const calls: [string, unknown[]][] = [];
+  const bridge = new Bridge(() => {}, () => {}, () => '1.0.0', async (method, args) => {
+    calls.push([method, args]);
+    if (method === 'nope') throw new Error("That isn't something the extension can do.");
+    return { method, n: args.length };
+  });
+  bridge.start();
+  await wait(100);
+  try {
+    // An old extension: coached, never sent state, can't call.
+    const old = await connect('chrome-extension://old');
+    old.send(JSON.stringify({ type: 'hello', browser: 'Chrome', version: '0.3.0' }));
+    await wait(80);
+    assert.equal(bridge.extended, false);
+
+    const ext = await connect('chrome-extension://new');
+    const inbox: { type: string; id?: string; ok?: boolean; value?: unknown; error?: string; state?: unknown }[] = [];
+    ext.on('message', (raw) => inbox.push(JSON.parse(String(raw))));
+    ext.send(JSON.stringify({ type: 'hello', browser: 'Chrome', version: '1.0.0', caps: ['call', 'state'] }));
+    await wait(80);
+    assert.equal(bridge.extended, true);
+
+    ext.send(JSON.stringify({ type: 'call', id: 7, method: 'session:start', args: [{ goal: 'Deck', minutes: 25 }] }));
+    ext.send(JSON.stringify({ type: 'call', id: 8, method: 'nope', args: [] }));
+    await wait(120);
+    assert.deepEqual(calls[0], ['session:start', [{ goal: 'Deck', minutes: 25 }]]);
+    const r7 = inbox.find((m) => m.type === 'result' && m.id === '7');
+    const r8 = inbox.find((m) => m.type === 'result' && m.id === '8');
+    assert.deepEqual(r7?.value, { method: 'session:start', n: 1 });
+    assert.equal(r7?.ok, true);
+    assert.equal(r8?.ok, false);
+    assert.match(String(r8?.error), /isn't something/);
+
+    // State goes only to extensions that asked for it.
+    let oldGotState = false;
+    old.on('message', (raw) => {
+      if (JSON.parse(String(raw)).type === 'state') oldGotState = true;
+    });
+    bridge.pushState({ hello: 1 } as never);
+    await wait(80);
+    assert.deepEqual(inbox.find((m) => m.type === 'state')?.state, { hello: 1 });
+    assert.equal(oldGotState, false);
+    ext.close();
+    old.close();
+  } finally {
+    bridge.stop();
+  }
+});
