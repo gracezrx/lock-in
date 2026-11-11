@@ -80,4 +80,36 @@ for (const f of readdirSync(join(root, 'src/renderer'))) {
     cpSync(join(root, 'src/renderer', f), join(out, 'renderer', f));
   }
 }
+
+// Lock In Extended, the Chrome extension: on its own it runs the same engine as the Mac app on
+// Chrome's tabs; linked to the Mac app it reports tabs and drives it. Built to dist/extension
+// (load it unpacked from there, or zip it for the Chrome Web Store with `npm run extension:zip`).
+const ext = join(out, 'extension');
+mkdirSync(join(ext, 'fonts'), { recursive: true });
+/** The Mac-only bits the shared engine imports, swapped for their web versions. */
+const webShims = {
+  name: 'lockin-web-shims',
+  setup(b) {
+    b.onResolve({ filter: /^(node:)?crypto$/ }, () => ({ path: join(root, 'src/extension/lib/node-crypto.ts') }));
+    b.onResolve({ filter: /^\.\/code$/ }, (a) => (a.importer.endsWith(join('src/main/crew/crew.ts')) ? { path: join(root, 'src/extension/lib/code.ts') } : undefined));
+  },
+};
+await build({
+  ...common,
+  sourcemap: false,
+  entryPoints: ['background', 'popup', 'content', 'blocked'].map((p) => join(root, `src/extension/${p}.ts`)),
+  outdir: ext,
+  platform: 'browser',
+  format: 'iife',
+  target: 'chrome116',
+  plugins: [webShims],
+});
+cpSync(join(root, 'src/extension/static'), ext, { recursive: true });
+cpSync(join(root, 'src/extension/manifest.json'), join(ext, 'manifest.json'));
+for (const [family, weights] of [['big-shoulders-display', ['800', '900']], ['public-sans', ['400', '600', '700']]]) {
+  for (const w of weights) {
+    const file = `${family}-latin-${w}-normal.woff2`;
+    cpSync(join(root, `node_modules/@fontsource/${family}/files/${file}`), join(ext, 'fonts', file));
+  }
+}
 console.log('Build complete → dist/');

@@ -1737,6 +1737,115 @@ function pushState(): void {
   windows.sendMain('state', st);
   windows.sendPanel('state', st);
   updateTray(st);
+  pushExtensionState(st);
+}
+
+// -----------------------------------------------------------------------------
+// Lock In Extended: the Chrome extension with its own panel. Linked to this Mac, its panel is a
+// remote for this one (the same actions, nothing that reads files or keys), and it keeps a copy
+// of what it needs to carry on alone when the Mac app isn't running: your distraction list and
+// labels, your crew (as the same member), to-dos, goals and today's meetings.
+
+const EXTENSION_CHANNELS = new Set([
+  'state:get', 'panel:data', 'session:start', 'session:startQuick', 'session:end', 'mute', 'unmute',
+  'todos:get', 'todos:complete', 'todos:add', 'todos:undo',
+  'crew:get', 'crew:bomb', 'crew:create', 'crew:join', 'crew:leave',
+  'goals:get', 'goals:check', 'goals:water', 'deadlines:get', 'calendar:get', 'dashboard:get',
+  'labels:current', 'coach:choose', 'talk:open', 'panel:open', 'panel:peek',
+]);
+
+async function extensionCall(method: string, args: unknown[]): Promise<unknown> {
+  if (method === 'ext:sync') return extensionSync();
+  if (method === 'ext:sessions') return importExtensionSessions(args[0]);
+  if (method === 'ext:profile') return extensionProfile(args[0]);
+  const fn = EXTENSION_CHANNELS.has(method) ? handlers.get(method) : undefined;
+  if (!fn) throw new Error("That isn't something the extension can do.");
+  return fn({} as Electron.IpcMainInvokeEvent, ...args);
+}
+
+/** What the extension needs to work alone, as you (sent only over the local link). */
+function extensionSync() {
+  const now = Date.now();
+  const sum = todos.summary();
+  const cs = settings.crew;
+  return {
+    profile,
+    labels: Object.fromEntries(Object.entries(classifier.cache).filter(([, v]) => v.source === 'user')),
+    crew: crew.joined ? { code: cs.code, crewName: cs.crewName, name: cs.name, server: cs.server, me: crew.me, shareGoal: cs.shareGoal, shareDistraction: cs.shareDistraction } : null,
+    todos: { open: sum.connected || sum.provider === 'none' ? todos.openRanked().slice(0, 50).map((t) => ({ id: t.id, title: t.title, due: t.due })) : [], canAdd: sum.canAdd, canComplete: sum.canComplete },
+    goals: panelData().goals,
+    events: calendar.upcoming(now, 2).map((e) => ({ title: e.title, start: e.start, end: e.end, allDay: e.allDay })),
+    calendarUrls: settings.calendar.urls,
+    quietInMeetings: settings.calendar.quietInMeetings,
+    lastGoal: appState.lastGoal,
+    syncedAt: now,
+  };
+}
+
+/** The coach and its patience, changed from the extension's panel (nothing else in the profile). */
+function extensionProfile(patch: unknown): boolean {
+  if (!profile) return false;
+  const p = (patch && typeof patch === 'object' ? patch : {}) as { persona?: unknown; toleranceMin?: unknown };
+  const next: Profile = { ...profile };
+  if (p.persona === 'sassy' || p.persona === 'gentle' || p.persona === 'firm' || p.persona === 'drill') {
+    next.persona = p.persona;
+    next.customCoach = undefined;
+  }
+  if (p.toleranceMin === 2 || p.toleranceMin === 5 || p.toleranceMin === 10) next.toleranceMin = p.toleranceMin;
+  profile = next;
+  store.saveProfile(next);
+  sess?.engine.setTolerance(next.toleranceMin);
+  applyCoach();
+  pushState();
+  return true;
+}
+
+/** Sessions the extension ran on its own, into your history (the same id twice is one session). */
+function importExtensionSessions(list: unknown): number {
+  if (!Array.isArray(list)) return 0;
+  const num = (v: unknown, max: number) => (typeof v === 'number' && Number.isFinite(v) ? Math.max(0, Math.min(max, v)) : 0);
+  let n = 0;
+  for (const x of list.slice(0, 200) as Partial<SessionRecord>[]) {
+    if (!x || typeof x.id !== 'string' || typeof x.startedAt !== 'number') continue;
+    const rec: SessionRecord = {
+      id: `ext-${x.id.slice(0, 60)}`,
+      goal: String(x.goal ?? '').slice(0, 200),
+      plannedMin: num(x.plannedMin, 600),
+      startedAt: x.startedAt,
+      endedAt: typeof x.endedAt === 'number' ? x.endedAt : undefined,
+      endedBy: x.endedBy === 'timer' || x.endedBy === 'user' || x.endedBy === 'quit' ? x.endedBy : 'user',
+      focusSec: num(x.focusSec, 36_000),
+      driftSec: num(x.driftSec, 36_000),
+      neutralSec: num(x.neutralSec, 36_000),
+      awaySec: num(x.awaySec, 36_000),
+      breakSec: num(x.breakSec, 36_000),
+      maxLevel: Math.round(num(x.maxLevel, 4)) as SessionRecord['maxLevel'],
+      interventions: Math.round(num(x.interventions, 1000)),
+      topDistractions: Object.fromEntries(Object.entries(x.topDistractions ?? {}).slice(0, 20).map(([k, v]) => [String(k).slice(0, 80), num(v, 36_000)])),
+    };
+    store.logSession(rec);
+    n += 1;
+  }
+  if (n) pushState();
+  return n;
+}
+
+let extPushAt = 0;
+let extPushTimer: NodeJS.Timeout | null = null;
+/** At most a couple of times a second: the panel's timer only needs seconds. */
+function pushExtensionState(st: LiveState): void {
+  if (!bridge?.extended) return;
+  const wait = 500 - (Date.now() - extPushAt);
+  if (wait <= 0) {
+    extPushAt = Date.now();
+    bridge.pushState(st);
+  } else if (!extPushTimer) {
+    extPushTimer = setTimeout(() => {
+      extPushTimer = null;
+      extPushAt = Date.now();
+      bridge.pushState(liveState());
+    }, wait);
+  }
 }
 
 // -----------------------------------------------------------------------------
@@ -2771,7 +2880,7 @@ async function boot(): Promise<void> {
   classifier = new Classifier(getProfile, store.labels(), () => (labelsDirty = true), { titlesStayLocal: () => settings.titlesStayLocal });
   classifier.setLabeler(makeLabeler(claude, () => settings));
 
-  bridge = new Bridge(log, () => pushState(), bundledExtensionVersion);
+  bridge = new Bridge(log, () => pushState(), bundledExtensionVersion, extensionCall);
   helper = new HelperSensor(helperPath(), log);
   fallback = new FallbackSensor();
   voice = new Voice({

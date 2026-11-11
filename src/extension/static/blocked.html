@@ -1,0 +1,39 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Not now · Lock In</title>
+    <link rel="icon" href="icons/icon48.png" />
+    <style>
+      @font-face { font-family: 'Big Shoulders Display'; src: url('fonts/big-shoulders-display-latin-900-normal.woff2') format('woff2'); font-weight: 900; font-display: block; }
+      @font-face { font-family: 'Big Shoulders Display'; src: url('fonts/big-shoulders-display-latin-800-normal.woff2') format('woff2'); font-weight: 800; font-display: block; }
+      @font-face { font-family: 'Public Sans'; src: url('fonts/public-sans-latin-400-normal.woff2') format('woff2'); font-weight: 400; }
+      @font-face { font-family: 'Public Sans'; src: url('fonts/public-sans-latin-700-normal.woff2') format('woff2'); font-weight: 700; }
+      html, body { height: 100%; margin: 0; }
+      body { display: grid; place-items: center; padding: 24px; box-sizing: border-box; background: #101820; color: #fff; font: 17px/1.5 'Public Sans', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; }
+      .card { width: min(540px, 100%); padding: 40px 44px 36px; border-radius: 18px; background: #e5202e; transform: rotate(2deg); box-shadow: 0 30px 70px rgba(0, 0, 0, 0.45); box-sizing: border-box; }
+      .card.bomb { background: #ffcf00; color: #101820; transform: rotate(-2deg); }
+      .card.open { background: #1e7f4f; color: #fff; transform: rotate(-1deg); transition: background 0.4s, transform 0.4s; }
+      .mark { font-family: 'Big Shoulders Display', 'Arial Narrow', sans-serif; font-weight: 800; font-size: 15px; letter-spacing: 0.1em; text-transform: uppercase; opacity: 0.85; margin-bottom: 12px; }
+      h1 { font-family: 'Big Shoulders Display', 'Arial Narrow', sans-serif; font-size: 88px; line-height: 0.9; margin: 0 0 16px; font-weight: 900; text-transform: uppercase; }
+      p { margin: 0; opacity: 0.94; }
+      .acts { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 24px; }
+      button, a.btn { display: inline-flex; align-items: center; height: 40px; padding: 0 16px; border-radius: 9px; border: 0; background: #101820; color: #fff; font: 700 14px 'Public Sans', sans-serif; text-decoration: none; cursor: pointer; }
+      .ghost { background: transparent; box-shadow: inset 0 0 0 1.5px currentColor; color: inherit; }
+      [hidden] { display: none !important; }
+    </style>
+  </head>
+  <body>
+    <div class="card" id="card">
+      <div class="mark" id="mark">Red card from Lock In</div>
+      <h1 id="title">Not now.</h1>
+      <p id="msg">This site is blocked until your session ends. Your work is one tab away.</p>
+      <div class="acts">
+        <button id="close" type="button">Close this tab</button>
+        <a class="btn ghost" id="open" hidden>Open it</a>
+      </div>
+    </div>
+    <script src="blocked.js"></script>
+  </body>
+</html>

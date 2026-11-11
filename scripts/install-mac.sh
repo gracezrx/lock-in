@@ -53,7 +53,7 @@ mkdir -p "$STAGE/node_modules" "$STAGE/native/mac-helper/build"
 cp "$PROJ/package.json" "$STAGE/package.json"
 ditto "$PROJ/dist" "$STAGE/dist"
 ditto "$PROJ/assets" "$STAGE/assets"
-ditto "$PROJ/extension" "$STAGE/extension"
+ditto "$PROJ/dist/extension" "$STAGE/extension"
 ditto "$PROJ/node_modules/ws" "$STAGE/node_modules/ws"
 for bin in lockin-helper lockin-calendar lockin-keys; do
   if [ -f "$PROJ/native/mac-helper/build/$bin" ]; then
