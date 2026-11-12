@@ -9,6 +9,9 @@
 //   node scripts/demo/launch/record.mjs [--film walkthrough] [--prompter]
 //   node scripts/demo/launch/record.mjs --stills 3,12,23   (just those moments, as JPEGs)
 //   node scripts/demo/launch/record.mjs --only 4          (render one chunk again, then join)
+//   node scripts/demo/launch/record.mjs --film walkthrough --take take.json --out screen.mp4
+//       the walkthrough on a real take's clock (../walkthrough/take.js): a title card, the
+//       screen moving at the speaker's pace, captions; the face and voice go on afterwards
 //
 // Every frame is drawn from a time t (film.js), so the film comes out the same every time. The
 // bomb scenes play the bomb clip (../bomb) inside the film, with its own sound
@@ -38,6 +41,7 @@ for (let i = 2; i < process.argv.length; i++) {
 const FILM_NAME = args.film ?? 'launch';
 const filmDir = resolve(here, '..', FILM_NAME);
 const PROMPTER = args.prompter !== undefined;
+const TAKE = args.take ? JSON.parse(readFileSync(resolve(args.take), 'utf8')) : null;
 // The prompter version is only for you to read from: 30 fps is plenty.
 const FPS = Number(args.fps ?? (PROMPTER ? 30 : 60));
 const SUB = Number(args.sub ?? (PROMPTER ? 1 : 2));
@@ -45,7 +49,7 @@ const ENV_RATE = 30;
 const W = 1920;
 const H = 1080;
 const out = resolve(args.out ?? join(root, `docs/${FILM_NAME}${PROMPTER ? '-prompter' : ''}.mp4`));
-const work = resolve(args.work ?? join(root, `release/${FILM_NAME}${PROMPTER ? '-prompter' : ''}-work`));
+const work = resolve(args.work ?? join(root, `release/${FILM_NAME}${PROMPTER ? '-prompter' : TAKE ? '-take' : ''}-work`));
 mkdirSync(work, { recursive: true });
 
 // ---- the voices ----
@@ -137,7 +141,7 @@ const QUERY = {
   launch: { wide: '1', me: 'Grace', them: 'Sam', line: 'Your investors can hear you scrolling.', goal: 'Investor update', mygoal: 'Pitch deck' },
   walkthrough: { me: 'Sam', them: 'Grace', pronoun: 'she', crew: 'Friends', line: 'Your investors can hear you scrolling.', goal: 'Investor update', mygoal: 'Pitch deck' },
 }[FILM_NAME] ?? {};
-const q = new URLSearchParams({ ...QUERY, ...(PROMPTER ? { prompter: '1' } : {}) });
+const q = new URLSearchParams({ ...QUERY, ...(PROMPTER ? { prompter: '1' } : {}), ...(TAKE ? { take: '1' } : {}) });
 await page.goto(`http://127.0.0.1:${port}/film/index.html?${q}`, { waitUntil: 'load' });
 await page.waitForFunction(() => {
   if (window.ready) return window.ready();
@@ -145,6 +149,10 @@ await page.waitForFunction(() => {
   const bm = b?.document.getElementById('macFrame')?.contentWindow;
   return !!(window.render && b?.render && bm?.render && b.document.getElementById('phoneFrame')?.contentWindow?.render && document.getElementById('mac').contentWindow?.render && document.getElementById('coach').contentWindow?.render);
 }, null, { timeout: 30_000 });
+if (TAKE) {
+  await page.evaluate((tk) => window.applyTake(tk), TAKE);
+  await page.waitForFunction(() => window.ready(), null, { timeout: 30_000 });
+}
 const WARM = await page.evaluate(() => window.FILM.WARM ?? [1, 3, 5, 8, 12, 14, 18, 23, 30, 31, 34, 38, 42, 45, 49, 52, 58, 63, 66]);
 await page.evaluate(async ({ dur, env, warm }) => {
   window.VO_DUR = dur;
@@ -252,7 +260,7 @@ function mix(skip) {
   let duck = 1;
   for (let i = 0; i < N; i++) {
     const t = i / SR;
-    const speaking = FILM.VO.some((v) => t >= v.at - 0.08 && t < v.at + VO_DUR[v.id] * (v.who === 'you' ? PACE : 1) + 0.12);
+    const speaking = FILM.VO.some((v) => t >= v.at - 0.08 && t < v.at + (v.dur ?? VO_DUR[v.id] * (v.who === 'you' ? PACE : 1)) + 0.12);
     const target = speaking ? 0.42 : 1;
     duck += (target - duck) * (target < duck ? 0.0009 : 0.00012);
     let g = duck;
