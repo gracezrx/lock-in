@@ -7,3 +7,7 @@ native/mac-helper/build/
 # The launch film is large: record it with npm run demo:launch
 docs/launch*.mp4
 docs/walkthrough*.mp4
+
+# agent evidence (screenshots, traces) is produced per run
+evidence/
+**/evidence/

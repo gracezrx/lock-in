@@ -1,0 +1,52 @@
+{
+  "counters": {
+    "ts.any": {
+      "paths": [
+        "."
+      ],
+      "ext": [
+        "ts",
+        "tsx"
+      ],
+      "pattern": "(:\\s*any\\b|<any>|as any\\b)",
+      "why": "any hides the bug the type system would have caught. Name the type or narrow it."
+    },
+    "console.log": {
+      "paths": [
+        "."
+      ],
+      "ext": [
+        "ts",
+        "tsx",
+        "js",
+        "jsx",
+        "mjs",
+        "cjs"
+      ],
+      "pattern": "console\\.log\\(",
+      "why": "Stray logging. Use the project logger or remove."
+    },
+    "todo-fixme": {
+      "paths": [
+        "."
+      ],
+      "ext": [
+        "ts",
+        "tsx",
+        "js",
+        "jsx",
+        "mjs",
+        "cjs",
+        "py",
+        "swift"
+      ],
+      "pattern": "\\b(TODO|FIXME|HACK)\\b",
+      "why": "A TODO in code is a task without an owner. Make it an issue labelled agent, or do it."
+    }
+  },
+  "baseline": {
+    "ts.any": 2,
+    "console.log": 86,
+    "todo-fixme": 0
+  }
+}
