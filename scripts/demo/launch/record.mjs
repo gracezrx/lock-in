@@ -10,6 +10,7 @@
 //   node scripts/demo/launch/record.mjs --stills 3,12,23   (just those moments, as JPEGs)
 //   node scripts/demo/launch/record.mjs --only 4          (render one chunk again, then join)
 //   node scripts/demo/launch/record.mjs --film walkthrough --take take.json --out screen.mp4
+//       ... --music off|only --wav stem.wav   (a sound stem on its own, for re-cutting)
 //       the walkthrough on a real take's clock (../walkthrough/take.js): a title card, the
 //       screen moving at the speaker's pace, captions; the face and voice go on afterwards
 //
@@ -263,9 +264,11 @@ function mix(skip) {
     const speaking = FILM.VO.some((v) => t >= v.at - 0.08 && t < v.at + (v.dur ?? VO_DUR[v.id] * (v.who === 'you' ? PACE : 1)) + 0.12);
     const target = speaking ? 0.42 : 1;
     duck += (target - duck) * (target < duck ? 0.0009 : 0.00012);
-    let g = duck;
-    for (const [a, b, gg] of FILM.MUSIC.duck) if (t >= a && t < b) g *= gg;
-    buf[i] = vo[i] * 1.0 + sfx[i] * 0.5 + bomb[i] * 0.65 + music[i] * 0.3 * g;
+    let g = args.music === 'only' ? 1 : duck;
+    if (args.music !== 'only') for (const [a, b, gg] of FILM.MUSIC.duck) if (t >= a && t < b) g *= gg;
+    const mus = args.music === 'off' ? 0 : 1;
+    const rest = args.music === 'only' ? 0 : 1;
+    buf[i] = (vo[i] * 1.0 + sfx[i] * 0.5 + bomb[i] * 0.65) * rest + music[i] * 0.3 * g * mus;
   }
   let peak = 0;
   for (let i = 0; i < N; i++) {
@@ -289,8 +292,12 @@ function mix(skip) {
 const MIXES = FILM.MIXES ?? [{ suffix: '', skip: [] }, { suffix: '-your-voice', skip: ['narrator'] }];
 for (const { suffix, skip } of PROMPTER ? MIXES.slice(0, 1) : MIXES) {
   const file = out.replace(/\.mp4$/, `${PROMPTER ? '' : suffix}.mp4`);
-  const wav = join(work, `mix${suffix}.wav`);
+  const wav = args.wav ? resolve(args.wav) : join(work, `mix${suffix}.wav`);
   writeFileSync(wav, toWav(mix(skip)));
+  if (args.wav) {
+    console.log(wav);
+    continue;
+  }
   mkdirSync(dirname(file), { recursive: true });
   const tmp = file.replace(/\.mp4$/, '.part.mp4');
   // Tame the booms, then bring it up to social-video loudness (-14 LUFS).
