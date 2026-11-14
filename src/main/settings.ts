@@ -36,6 +36,7 @@ export const DEFAULT_SETTINGS: Settings = {
   goals: { enabled: true, suggest: true, nudges: true },
   attention: { pauses: true, maxPerDay: 12, minGapMin: 20 },
   ui: 'panel',
+  telemetry: { features: true, apps: false, asked: false },
 };
 
 /** Saved settings plus defaults for anything added since, and one-time upgrades. */
@@ -63,5 +64,6 @@ export function migrateSettings(raw: Partial<Settings>): Settings {
     look: { ...DEFAULT_SETTINGS.look, ...(raw.look ?? {}) },
     goals: { ...DEFAULT_SETTINGS.goals, ...(raw.goals ?? {}) },
     attention: { ...DEFAULT_SETTINGS.attention, ...(raw.attention ?? {}) },
+    telemetry: { ...DEFAULT_SETTINGS.telemetry, ...(raw.telemetry ?? {}) },
   };
 }

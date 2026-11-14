@@ -97,9 +97,9 @@ const code = join(res, 'app');
 mkdirSync(code, { recursive: true });
 const { name, productName, version, description, main, type, license } = pkg;
 writeFileSync(join(code, 'package.json'), JSON.stringify({ name, productName, version, description, main, type, license }, null, 2));
-for (const dir of ['dist', 'assets']) cpSync(join(PROJ, dir), join(code, dir), { recursive: true });
-// Lock In Extended also at its old address, so an extension loaded from there keeps updating.
-cpSync(join(PROJ, 'dist/extension'), join(code, 'extension'), { recursive: true });
+// The app's code only: Lock In Extended (dist/extension) is its own download, never in the app.
+cpSync(join(PROJ, 'dist'), join(code, 'dist'), { recursive: true, filter: (src) => !src.startsWith(join(PROJ, 'dist/extension')) });
+cpSync(join(PROJ, 'assets'), join(code, 'assets'), { recursive: true });
 cpSync(join(PROJ, 'node_modules/ws'), join(code, 'node_modules/ws'), { recursive: true });
 const helpers = join(PROJ, 'native/mac-helper/build');
 const found = existsSync(helpers) ? readdirSync(helpers).filter((f) => f.startsWith('lockin-')) : [];

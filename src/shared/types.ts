@@ -318,6 +318,17 @@ export interface Settings {
   /** 'panel': everything lives in a small panel under the menu bar icon, and the window only opens
    *  for settings. 'window': the classic app window and menu bar menu. */
   ui: 'panel' | 'window';
+  /** Anonymous usage data for Lock In's maker: features used, and (only if you say yes) app usage. */
+  telemetry: TelemetrySettings;
+}
+
+export interface TelemetrySettings {
+  /** Which features you use (anonymous). */
+  features: boolean;
+  /** Seconds per day in each app and site, and how they were labeled. Off until you say yes. */
+  apps: boolean;
+  /** You've seen the question in setup (or in Settings). */
+  asked: boolean;
 }
 
 export interface KeyStatus {
@@ -520,9 +531,8 @@ export interface SetupStatus {
   helperBuilt: boolean;
   helperRunning: boolean;
   extensionConnected: boolean;
-  /** Connected, but older than the extension that came with this Lock In. */
+  /** Connected, but older than the version this Lock In needs (it should be updated). */
   extensionOutdated?: boolean;
-  extensionPath: string;
   keys: KeyStatus;
   /** Running as the installed Lock In app (not from Terminal). */
   installed: boolean;

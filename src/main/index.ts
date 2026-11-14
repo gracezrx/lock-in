@@ -46,7 +46,7 @@ import { Classifier } from './engine/classifier';
 import type { DriftEvent } from './engine/drift';
 import { Session } from './engine/session';
 import { Guardrails } from './guardrails';
-import { assetPath, calendarReaderPath, distDir, extensionPath, helperPath, isInstalledApp, keyWatcherPath, userDir } from './paths';
+import { assetPath, calendarReaderPath, distDir, helperPath, isInstalledApp, keyWatcherPath, userDir } from './paths';
 import { Router } from './router';
 import { Bridge } from './sensors/bridge';
 import { FallbackSensor } from './sensors/fallback';
@@ -54,6 +54,8 @@ import { HelperSensor } from './sensors/helper';
 import { Sampler } from './sensors/sampler';
 import { HoldSpace, holdSpaceAllowed } from './sensors/holdspace';
 import { Store } from './store';
+import { EXTENSION_DOWNLOAD, EXTENSION_MIN_VERSION } from '../shared/links';
+import { Telemetry } from './telemetry';
 import { SUGGESTED, VoiceCatalog, previewLine } from './voices';
 import { Windows } from './windows';
 
@@ -79,6 +81,8 @@ function log(m: string): void {
 }
 
 let store: Store;
+/** Anonymous usage data (telemetry.ts). */
+let telemetry: Telemetry | null = null;
 let profile: Profile | null;
 let settings: Settings;
 let classifier: Classifier;
@@ -178,6 +182,7 @@ function startSession(goal: string, minutes: number, opts: { pomodoro?: boolean 
   windows.hideToast();
   void notifier.notify({ kind: 'session', title: 'Locked in', body: `${goal.trim() || 'Deep work'}, ${pomo ? '4 rounds of 25 minutes' : `${minutes} minutes`}.${capNote}${settings.goals.enabled && goalsData ? countsToward(goal) : ''} Go.`, speak: getProfile().persona === 'sassy' ? `Okay. ${goal.trim() || 'Deep work'}. Let's see how long this lasts.` : `Locked in. ${goal.trim() || 'Deep work'}. Go.`, autoHideMs: 4000 });
   log(`[session] start "${goal}" ${minutes} min`);
+  telemetry?.track('session_started', { minutes, pomodoro: !!pomo, has_goal: !!goal.trim() && goal.trim() !== 'Deep work', capped_by_meeting: !!capNote, persona: p.persona, custom_coach: !!p.customCoach });
   pushState();
 }
 
@@ -193,6 +198,7 @@ function endSession(by: 'user' | 'timer' | 'quit'): void {
   classifier.modelEnabled = false;
   todos.snooze(10); // no to-do roast right on top of the recap
   log(`[session] end (${by}) focus ${Math.round(rec.focusSec / 60)} min, drift ${Math.round(rec.driftSec / 60)} min`);
+  telemetry?.track('session_ended', { by, planned_min: rec.plannedMin, minutes: Math.round(((rec.endedAt ?? Date.now()) - rec.startedAt) / 60_000), focus_min: Math.round(rec.focusSec / 60), drift_min: Math.round(rec.driftSec / 60), interventions: rec.interventions });
   if (by !== 'quit') void coach.onSessionEnd(rec);
   pushState();
 }
@@ -201,12 +207,15 @@ function handleEvents(events: DriftEvent[], s: LabeledSample): void {
   for (const ev of events) {
     if (ev.type === 'level') {
       log(`[engine] level ${ev.level} (${ev.reason}) on ${s.domain ?? s.app}`);
+      telemetry?.track('coach_level', { level: ev.level, reason: ev.reason, on: s.browser ? 'site' : 'app', persona: getProfile().persona, live_lines: !!store.getKey('anthropic'), voice: store.getKey('elevenlabs') ? 'elevenlabs' : 'mac' });
       void coach.onLevel(ev.level, ev.reason, s);
     } else if (ev.type === 'recovered') {
       log('[engine] recovered');
+      telemetry?.track('coach_recovered');
       coach.onRecovered();
     } else if (ev.type === 'away_checkin') {
       void coach.onAwayCheckin();
+      telemetry?.track('coach_away_checkin');
     }
   }
 }
@@ -267,6 +276,14 @@ async function loopOnce(): Promise<void> {
   // All-day: to-do watchdog and routines (they only count time you are actually at the computer).
   const idle = powerMonitor.getSystemIdleTime();
   rhythm?.tick(now, idle, dt);
+  if (telemetry) {
+    telemetry.sample(current, dt, !!sess, idle);
+    if (bridge.connected !== extensionWas) {
+      extensionWas = bridge.connected;
+      telemetry.track(extensionWas ? 'extension_connected' : 'extension_disconnected', { extended: bridge.extended });
+    }
+    if (telemetry.due()) void telemetry.flush();
+  }
   const inCall = !!current?.inCall;
   const meeting = settings.calendar.quietInMeetings ? calendar.now(now) : undefined;
   todos.tick(idle, dt, !sess && !inCall && !meeting && !guard.muted() && !coach.active && !windows.overlayVisible && !talk.isOpen);
@@ -484,6 +501,7 @@ function bombLanded(b: { id: string; from: string; name: string; insult: string 
   const me = crewLocal().state;
   if (me === 'locked' || me === 'break') return 'bounced';
   store.append('roasts.ndjson', { at: now, kind: 'bomb', from: b.name });
+  telemetry?.track('bomb_received');
   statsCache = null;
   const locks = settings.crew.bombsLockout !== false;
   if (locks) startLockout(b.name, now);
@@ -588,17 +606,6 @@ function pushCrew(): void {
 
 // -----------------------------------------------------------------------------
 // The Chrome card: a big Lock In card over the distracting tab for 5 seconds
-
-let extensionVersion: string | null | undefined;
-function bundledExtensionVersion(): string | null {
-  if (extensionVersion !== undefined) return extensionVersion;
-  try {
-    extensionVersion = String((JSON.parse(readFileSync(join(extensionPath(), 'manifest.json'), 'utf8')) as { version?: string }).version ?? '') || null;
-  } catch {
-    extensionVersion = null;
-  }
-  return extensionVersion;
-}
 
 let lastTabCard = 0;
 /** The browser tab in front is a distraction (YouTube and the like) and the extension can cover it. */
@@ -786,6 +793,7 @@ function toggleTalk(): void {
 
 function startTalk(situation: Situation, opts: { detail?: string; onEnd?: () => void; focus?: boolean } = {}): void {
   windows.hideToast();
+  telemetry?.track('talk_opened', { situation, voice: !!store.getKey('elevenlabs') });
   void talk.start(situation, opts).then(() => pushState());
 }
 
@@ -839,7 +847,10 @@ function setupCoachIpc(): void {
   const views = () => coaches.list().map((c) => coachView(c.id)).filter(Boolean);
   handle('coaches:list', () => views());
   handle('coaches:get', (_e, id: string) => coachView(id));
-  handle('coaches:create', (_e, p: { name: string; relation?: string; base?: Profile['persona'] }) => coachView(coaches.create({ base: getProfile().persona, ...p }).id));
+  handle('coaches:create', (_e, p: { name: string; relation?: string; base?: Profile['persona'] }) => {
+    telemetry?.track('coach_created', { relation: String(p?.relation ?? '').slice(0, 24) || null });
+    return coachView(coaches.create({ base: getProfile().persona, ...p }).id);
+  });
   handle('coaches:update', (_e, id: string, patch: Parameters<Coaches['update']>[1]) => {
     coaches.update(id, patch ?? {});
     return coachView(id);
@@ -901,6 +912,7 @@ function setupCoachIpc(): void {
     applyCoach();
     pushState();
     log(c ? `[coaches] ${c.name} is the coach now` : '[coaches] back to the built-in coach');
+    telemetry?.track('coach_chosen', { custom: !!c, cloned_voice: !!(c?.voice && c.useVoice) });
     return profile;
   });
   handle('coaches:hear', async (_e, id: string, kind?: CoachLineKind, line?: string) => {
@@ -917,6 +929,7 @@ function setupCoachIpc(): void {
   handle('coaches:clone', async (_e, id: string, p: { files?: ClipFile[]; macCut?: string[]; consent?: boolean }) => {
     const files = (p?.files ?? []).map((f) => ({ name: String(f.name).replace(/[^\w.-]/g, '_').slice(0, 60), data: new Uint8Array(f.data), mime: String(f.mime || 'audio/wav'), seconds: Number(f.seconds) || 0 }));
     const r = await coaches.cloneVoice(id, { files, macCut: p?.macCut ?? [], consent: p?.consent === true });
+    telemetry?.track('voice_cloned', { ok: !!(r as { ok?: boolean }).ok, clips: files.length, seconds: Math.round(files.reduce((a, f) => a + f.seconds, 0)) });
     return { ...r, view: coachView(id) };
   });
   handle('coaches:deleteVoice', async (_e, id: string) => ({ ...(await coaches.deleteVoice(id)), view: coachView(id) }));
@@ -1612,6 +1625,7 @@ async function phoneCall(method: string, args: unknown[]): Promise<unknown> {
   }
   const fn = PHONE_CHANNELS.has(method) ? handlers.get(method) : undefined;
   if (!fn) throw new Error("That isn't something the phone can do.");
+  telemetry?.action(method, 'phone');
   return fn({} as Electron.IpcMainInvokeEvent, ...args);
 }
 
@@ -1760,6 +1774,7 @@ async function extensionCall(method: string, args: unknown[]): Promise<unknown> 
   if (method === 'ext:profile') return extensionProfile(args[0]);
   const fn = EXTENSION_CHANNELS.has(method) ? handlers.get(method) : undefined;
   if (!fn) throw new Error("That isn't something the extension can do.");
+  telemetry?.action(method, 'extension');
   return fn({} as Electron.IpcMainInvokeEvent, ...args);
 }
 
@@ -2296,7 +2311,7 @@ function installedBrowsers(): { id: string; name: string; bin: string; url: stri
 
 function setupStatus(): SetupStatus {
   const mac = process.platform === 'darwin';
-  if (FAKE_MAC) return { platform: 'darwin', accessibility: 'missing', microphone: 'not-determined', helperBuilt: true, helperRunning: false, extensionConnected: false, extensionPath: extensionPath(), keys: store.keyStatus(), installed: true, openAtLogin: false };
+  if (FAKE_MAC) return { platform: 'darwin', accessibility: 'missing', microphone: 'not-determined', helperBuilt: true, helperRunning: false, extensionConnected: false, keys: store.keyStatus(), installed: true, openAtLogin: false };
   return {
     platform: process.platform,
     accessibility: mac ? (systemPreferences.isTrustedAccessibilityClient(false) || helper.accessibility ? 'granted' : 'missing') : 'n/a',
@@ -2305,7 +2320,6 @@ function setupStatus(): SetupStatus {
     helperRunning: helper.running,
     extensionConnected: bridge.connected,
     extensionOutdated: bridge.outdated,
-    extensionPath: extensionPath(),
     keys: store.keyStatus(),
     installed: isInstalledApp(),
     openAtLogin: isInstalledApp() ? app.getLoginItemSettings().openAtLogin : false,
@@ -2321,16 +2335,68 @@ type Handler = (e: Electron.IpcMainInvokeEvent, ...args: any[]) => unknown;
 const handlers = new Map<string, Handler>();
 function handle(channel: string, fn: Handler): void {
   handlers.set(channel, fn);
-  ipcMain.handle(channel, fn);
+  ipcMain.handle(channel, (e, ...args) => {
+    telemetry?.action(channel);
+    return fn(e, ...args);
+  });
+}
+
+let extensionWas = false;
+
+/** How this install is set up (sent with usage data): choices and on/off, never names or text. */
+function telemetryTraits(): Record<string, string | number | boolean | null> {
+  const p = profile;
+  const ks = store.keyStatus();
+  return {
+    onboarded: !!p,
+    persona: p?.persona ?? null,
+    custom_coach: !!p?.customCoach,
+    roles: p ? (p.roles ?? [p.role]).join(',') : null,
+    tolerance_min: p?.toleranceMin ?? null,
+    claude_key: ks.anthropic,
+    elevenlabs_key: ks.elevenlabs,
+    extension: !!bridge?.connected,
+    window_sensor: !!helper?.running,
+    accessibility: process.platform === 'darwin' ? systemPreferences.isTrustedAccessibilityClient(false) : null,
+    microphone: process.platform === 'darwin' ? systemPreferences.getMediaAccessStatus('microphone') : null,
+    calendar: !!calendar?.configured,
+    todo_provider: settings.todo.provider,
+    crew: !!crew?.joined,
+    phone: settings.phone.enabled,
+    ui: settings.ui,
+    theme: settings.look.theme,
+    goals: settings.goals.enabled,
+    talk_hold_space: settings.talk.holdSpace !== false,
+    open_at_login: isInstalledApp() ? app.getLoginItemSettings().openAtLogin : false,
+  };
+}
+
+/** What the pages may report themselves: setup's steps and choices, and which page is open. */
+const PAGE_EVENTS = /^(onboarding_[a-z_]+|page_view|telemetry_choice|coach_preview|panel_opened)$/;
+
+function setupTelemetryIpc(): void {
+  handle('telemetry:track', (_e, name: string, props?: Record<string, string | number | boolean | null>) => {
+    if (typeof name === 'string' && PAGE_EVENTS.test(name)) telemetry?.track(name, props && typeof props === 'object' ? props : undefined);
+    return true;
+  });
+  // Settings → Your data: exactly what would be sent next, and the id it goes under.
+  handle('telemetry:payload', () => ({ on: !!telemetry?.on, ...(telemetry?.payload() ?? {}) }));
+  handle('telemetry:forget', async () => {
+    const ok = (await telemetry?.forget()) ?? false;
+    log(`[telemetry] delete my data: ${ok ? 'done' : 'failed'}`);
+    return ok;
+  });
 }
 
 function setupIpc(): void {
+  setupTelemetryIpc();
   setupCoachIpc();
   setupPhoneIpc();
   setupGoalsIpc();
   handle('state:get', () => liveState());
   handle('profile:get', () => profile);
   handle('profile:save', (_e, p: Profile) => {
+    if (!profile) telemetry?.track('profile_created', { roles: (p.roles ?? [p.role]).join(','), persona: p.persona, tolerance_min: p.toleranceMin });
     profile = p;
     store.saveProfile(p);
     sess?.engine.setTolerance(p.toleranceMin);
@@ -2344,8 +2410,17 @@ function setupIpc(): void {
   handle('settings:save', (_e, s: Partial<Settings>) => {
     const voiceChanged = s.voiceId !== undefined && s.voiceId !== settings.voiceId;
     if (voiceChanged && s.voiceName === undefined) s = { ...s, voiceName: undefined };
+    const was = settings.telemetry;
     settings = { ...settings, ...s };
     store.saveSettings(settings);
+    if (s.telemetry) {
+      const t = settings.telemetry;
+      if (t.features !== was.features || t.apps !== was.apps) log(`[telemetry] usage data ${t.features ? 'on' : 'off'}, app usage ${t.apps ? 'on' : 'off'}`);
+      // Saying yes or no to app usage is itself sent (the last thing sent, when it's a no to everything).
+      if (t.features && (t.apps !== was.apps || !was.asked)) telemetry?.track('telemetry_choice', { apps: t.apps });
+      if (!t.features) telemetry?.clear();
+      else void telemetry?.flush();
+    }
     if (s.calendar) void calendar.refresh(true).then(() => pushState());
     if (s.talk) holdSpace.setActive(process.platform === 'darwin' && settings.talk.holdSpace !== false);
     if (voiceChanged) warmAgent();
@@ -2377,8 +2452,10 @@ function setupIpc(): void {
       store.setKey('todoist', k.todoist);
       void todos.refresh(true).then(() => pushState());
     }
+    const ks = store.keyStatus();
+    for (const name of ['anthropic', 'elevenlabs', 'todoist'] as const) if (k[name] !== undefined) telemetry?.track('key_saved', { key: name, added: ks[name] });
     pushState();
-    return store.keyStatus();
+    return ks;
   });
   handle('session:start', (_e, a: { goal: string; minutes: number; pomodoro?: boolean }) => {
     startSession(a.goal, Math.max(5, Math.min(240, Math.round(a.minutes))), { pomodoro: !!a.pomodoro });
@@ -2652,10 +2729,12 @@ function setupIpc(): void {
   handle('crew:get', () => crewPayload());
   handle('crew:create', (_e, a: { crewName: string; name: string }) => {
     crew.create(String(a?.crewName ?? ''), String(a?.name ?? ''));
+    telemetry?.track('crew_created');
     return crewPayload();
   });
   handle('crew:join', (_e, a: { code: string; name: string }) => {
     const r = crew.join(String(a?.code ?? ''), String(a?.name ?? ''));
+    telemetry?.track('crew_joined', { ok: !!(r as { ok?: boolean }).ok });
     return { ...r, ...crewPayload() };
   });
   handle('crew:leave', async () => {
@@ -2664,6 +2743,7 @@ function setupIpc(): void {
   });
   handle('crew:bomb', async (_e, a: { to: string; insult: string }) => {
     const r = await crew.throwBomb(String(a?.to ?? ''), String(a?.insult ?? ''));
+    telemetry?.track('bomb_sent', { ok: !!r.ok, custom_line: !!String(a?.insult ?? '').trim() });
     if (r.ok) {
       statsCache = null;
       checkAchievements(Date.now());
@@ -2748,26 +2828,26 @@ function setupIpc(): void {
     if (process.platform === 'darwin') await systemPreferences.askForMediaAccess('microphone');
     return setupStatus();
   });
-  handle('setup:openExtensionFolder', () => shell.openPath(extensionPath()));
   handle('setup:browsers', () => installedBrowsers().map(({ id, name }) => ({ id, name })));
-  // The easy way in: the browser opens on its extensions page, the extension folder is shown in
-  // Finder (to drag onto that page) and its path is on the clipboard (for Load unpacked, ⌘⇧G).
+  // Lock In Extended is its own download: the browser opens on its extensions page (for Load
+  // unpacked) and the download page opens too.
   handle('setup:addExtension', (_e, id?: string) => {
     const all = installedBrowsers();
     const b = all.find((x) => x.id === id) ?? all[0];
-    clipboard.writeText(extensionPath());
+    void shell.openExternal(EXTENSION_DOWNLOAD);
     if (b) {
-      try {
-        // Run the browser itself with the address: a running browser takes it over, a closed one opens on it.
-        const child = spawn(b.bin, [b.url], { detached: true, stdio: 'ignore' });
-        child.on('error', () => void shell.openExternal(b.url));
-        child.unref();
-      } catch {
-        void shell.openExternal(b.url);
-      }
+      setTimeout(() => {
+        try {
+          // Run the browser itself with the address: a running browser takes it over, a closed one opens on it.
+          const child = spawn(b.bin, [b.url], { detached: true, stdio: 'ignore' });
+          child.on('error', () => void shell.openExternal(b.url));
+          child.unref();
+        } catch {
+          void shell.openExternal(b.url);
+        }
+      }, 1500);
     }
-    setTimeout(() => shell.showItemInFolder(extensionPath()), b ? 1200 : 0);
-    return { browser: b?.name ?? null, path: extensionPath() };
+    return { browser: b?.name ?? null, url: EXTENSION_DOWNLOAD };
   });
   // Setup's "Show me": the panel opens under the padlock while setup stays open.
   handle('panel:peek', () => showPanel());
@@ -2846,6 +2926,16 @@ async function boot(): Promise<void> {
   store = new Store(userDir());
   profile = store.profile();
   settings = store.settings();
+  telemetry = new Telemetry({
+    dir: store.dir,
+    version: app.getVersion(),
+    osVersion: `${process.platform === 'darwin' ? 'macOS' : process.platform} ${process.getSystemVersion()}`,
+    // Only the real app sends anything: not `npm run dev`, not the tests (LOCKIN_TELEMETRY=on to try it from Terminal).
+    enabled: () => !SMOKE && process.env.LOCKIN_TELEMETRY !== 'off' && (isInstalledApp() || process.env.LOCKIN_TELEMETRY === 'on') && settings.telemetry.features !== false,
+    shareApps: () => settings.telemetry.apps === true,
+    traits: telemetryTraits,
+    log,
+  });
   // The full smoke test walks the classic window's pages; LOCKIN_PANEL checks the panel.
   if (SMOKE && !process.env.LOCKIN_PANEL && !process.env.LOCKIN_ONBOARD) settings = { ...settings, ui: 'window' };
   const st = store.state();
@@ -2880,7 +2970,7 @@ async function boot(): Promise<void> {
   classifier = new Classifier(getProfile, store.labels(), () => (labelsDirty = true), { titlesStayLocal: () => settings.titlesStayLocal });
   classifier.setLabeler(makeLabeler(claude, () => settings));
 
-  bridge = new Bridge(log, () => pushState(), bundledExtensionVersion, extensionCall);
+  bridge = new Bridge(log, () => pushState(), () => EXTENSION_MIN_VERSION, extensionCall);
   helper = new HelperSensor(helperPath(), log);
   fallback = new FallbackSensor();
   voice = new Voice({
@@ -3142,6 +3232,9 @@ async function boot(): Promise<void> {
     else windows.openMain('home');
   }
   log(`[app] ${isInstalledApp() ? 'installed app' : 'dev'}${atLogin ? ', opened at login' : ''}`);
+  telemetry.track('app_opened', { at_login: atLogin, first_run: !profile, ui: settings.ui });
+  // The first batch goes out a minute in (setup's first steps included), then every few minutes.
+  setTimeout(() => void telemetry?.flush(), 60_000);
 
   if (SMOKE) await smokeTest();
 }
@@ -3225,7 +3318,7 @@ async function newFeaturesSmoke(
   // 3. Calendar (events injected; there is no network here).
   const now = Date.now();
   const at = (min: number) => now + min * 60_000;
-  settings = { ...settings, calendar: { ...settings.calendar, urls: ['https://calendar.google.com/calendar/ical/grace%40example.com/private-abc/basic.ics'] } };
+  settings = { ...settings, calendar: { ...settings.calendar, urls: ['https://calendar.google.com/calendar/ical/you%40example.com/private-abc/basic.ics'] } };
   calendar.lastFetch = now;
   calendar.events = [
     { id: 'a', title: 'LA Tech Week', start: at(-600), end: at(800), allDay: true, busy: false, calendar: 'g' },
@@ -3484,7 +3577,7 @@ async function smokeVoicesHttp(input: string | URL | Request): Promise<Response>
     return json({
       voices: [
         { voice_id: 'cgSgspJ2msm6clMCkdW9', name: 'Jessica', category: 'premade', preview_url: 'https://storage.googleapis.com/x/jessica.mp3', labels: { accent: 'american' } },
-        { voice_id: 'myclone123', name: 'Grace (my voice)', category: 'cloned', description: '', labels: { accent: 'american', gender: 'female' } },
+        { voice_id: 'myclone123', name: 'My voice', category: 'cloned', description: '', labels: { accent: 'american', gender: 'female' } },
         { voice_id: 'saved456', name: 'Zara - The Warm Conversationalist', category: 'professional', description: 'The warm, real-world conversationalist', labels: { accent: 'american', gender: 'female' } },
       ],
       has_more: false,
@@ -3507,7 +3600,7 @@ async function smokeVoicesHttp(input: string | URL | Request): Promise<Response>
   return new Response('not found', { status: 404 });
 }
 
-/** A pretend chat between Grace and her mum, as ElevenLabs would return it with two voices. */
+/** A pretend chat between you and your mum, as ElevenLabs would return it with two voices. */
 const SMOKE_CALL: [string, number, number, string][] = [
   ['speaker_0', 0, 18, '宝贝，你吃饭了没有？不要又熬夜啊。我跟你说，work is important, 但是身体更重要。'],
   ['speaker_1', 18, 24, 'Mum I ate, I promise. I am just finishing the deck.'],
@@ -3996,9 +4089,24 @@ async function onboardShots(wait: (ms: number) => Promise<unknown>, shot: (win: 
   await wait(200);
   await shot(w, 'O06-distractions-picked');
   await next();
+  await shot(w, 'O06b-coach');
+  await click('.choices .choice', 'Drill sergeant');
+  await wait(200);
+  await js(`document.querySelector('.quiz').scrollTop = 9999`);
+  await wait(200);
+  await shot(w, 'O06c-coach-keys');
+  await next();
+  await shot(w, 'O06d-data');
+  const blocked = await js(`document.querySelector('.quiz-next').disabled + ' ' + document.querySelector('.quiz-next').textContent`);
+  console.log('SMOKE onboard data step before choosing:', JSON.stringify(blocked));
+  await click('.consent-pick .seg', 'Share it');
+  await wait(300);
+  await shot(w, 'O06e-data-chosen');
+  await next();
   await wait(2500);
+  console.log('SMOKE onboard telemetry + persona:', JSON.stringify(settings.telemetry), getProfile().persona);
   await shot(w, 'O07-connect');
-  // The four connections: show the padlock, start the extension, connect the calendar.
+  // The connections: show the padlock, start the extension, connect the calendar.
   await js(`[...document.querySelectorAll('.quiz .connect-row[data-key="calendar"] button')].find((b) => /Connect/.test(b.textContent))?.click()`);
   await wait(1500);
   await js(`document.querySelector('.quiz .connect-row[data-key="extension"] button')?.click()`);
@@ -4046,7 +4154,7 @@ async function panelShots(wait: (ms: number) => Promise<unknown>, shot: (win: El
   rhythm.logWater(Date.now());
   rhythm.logWater(Date.now());
   saveGoals();
-  if (!crew.joined) crew.create('Cofounders', 'Grace');
+  if (!crew.joined) crew.create('Cofounders', 'Sam');
   appState.lastGoal = 'writing a script for YC';
   pushState();
   await wait(1200);
@@ -4359,6 +4467,8 @@ app.on('activate', () => {
 });
 app.on('before-quit', () => {
   if (sess) endSession('quit');
+  telemetry?.track('app_quit');
+  telemetry?.saveQueue();
   if (store && todos && settings?.exportCsv.auto) runExport();
   if (classifier) store.saveLabels(classifier.cache);
   helper?.stop();

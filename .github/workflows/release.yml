@@ -1,5 +1,6 @@
-# Builds the downloadable Mac app on Apple silicon and publishes it as a GitHub release,
-# once per version: bump "version" in package.json (and .github/release-notes.md) and push.
+# Builds the downloadable Mac app on Apple silicon and, separately, the Chrome extension, and
+# publishes both as one GitHub release, once per version: bump "version" in package.json (and
+# .github/release-notes.md) and push.
 name: Release
 
 on:
@@ -39,11 +40,22 @@ jobs:
         if: steps.v.outputs.exists == 'false'
         run: npm run package:mac
 
+      - name: Build Lock In Extended (its own download)
+        if: steps.v.outputs.exists == 'false'
+        run: npm run extension:zip
+
+      - name: The app has no extension and no keys in it
+        if: steps.v.outputs.exists == 'false'
+        run: |
+          unzip -l release/Lock-In-mac-arm64.zip | grep -q "dist/extension" && { echo "The extension is inside the app"; exit 1; } || true
+          rm -rf /tmp/app && mkdir /tmp/app && unzip -q release/Lock-In-mac-arm64.zip -d /tmp/app
+          if grep -rIlE "sk_[a-f0-9]{32,}|sk-ant-[A-Za-z0-9_-]{20,}" "/tmp/app/Lock In.app/Contents/Resources/app"; then echo "A key is inside the app"; exit 1; fi
+
       - name: Publish the release
         if: steps.v.outputs.exists == 'false'
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
           v="${{ steps.v.outputs.version }}"
-          gh release create "v$v" release/Lock-In-mac-arm64.zip \
+          gh release create "v$v" release/Lock-In-mac-arm64.zip release/Lock-In-Extended.zip \
             --title "Lock In $v" --notes-file .github/release-notes.md --target "$GITHUB_SHA"

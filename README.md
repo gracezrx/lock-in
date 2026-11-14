@@ -25,7 +25,7 @@ npm install
 npm run dev              # builds the Swift sensor + the app, then launches it
 ```
 
-`npm run package:mac` builds the downloadable app (`release/Lock-In-mac-arm64.zip`).
+`npm run package:mac` builds the downloadable app (`release/Lock-In-mac-arm64.zip`). The Chrome extension is separate: `npm run extension:zip` builds `release/Lock-In-Extended.zip`. Pushing a new `version` in `package.json` to `main` builds both on GitHub and publishes them as one release.
 
 ### Install your build as a normal app
 
@@ -33,15 +33,17 @@ Run `bash scripts/install-mac.sh` after `npm run build`. It makes **Lock In** in
 
 Then, inside the app:
 
-1. **Set it up.** Setup opens on first launch and is three screens:
+1. **Set it up.** Setup opens on first launch: five questions, then the connections.
    - **What you're going after**: one to three big goals ("Fundraise well", "Launch my side projects"), each with an optional date, plus daily habits Lock In measures for you (focus hours, breaks, water, start time, bedtime).
    - **Today's to-dos**: Lock In's own list by default (write today's right there, with a "step toward" each goal one tap away), or connect Reminders, Things, Todoist or a spreadsheet.
    - **What pulls you off track**: the sites (YouTube, X, Reddit…) and the apps on this Mac. Games, streaming and social apps are picked for you; chat apps are offered but start off. Optionally, what you do, which decides what counts as work.
-   - **Hook it up**: the last screen walks through the four connections, a click or two each, and ticks them off as they work: the padlock in the menu bar (*Show me*, and *Open when I log in*), Accessibility (*Allow*), the browser extension (*Open Chrome* opens its extensions page, shows the extension folder in Finder to drag onto it, and copies its path for *Load unpacked*), and your calendar (*Connect* reads the calendars already on your Mac; if your Google account isn't there yet, *Add Google account* opens Internet Accounts and Lock In picks it up by itself). Anything skipped is in *Settings*.
+   - **Who's going to yell at you?**: the coach's personality (sassy best friend, gentle friend, firm coach, drill sergeant), with a sample line each, and *Hear your coach*. Then the two keys, each with *Get a key* (it opens the right page), what it does, and the permissions to tick: Claude for live lines, ElevenLabs for the voice and talking back. Both optional. It also points to making a coach from someone's voice (your mom, your boss) on the Coach page.
+   - **Help make Lock In better?**: whether to share anonymous usage data (see [Usage data](#usage-data)). Which features you use is on unless you turn it off; app usage has no default, you pick *Share it* or *Keep it*.
+   - **Hook it up**: the last screen walks through the connections, a click or two each, and ticks them off as they work: the padlock in the menu bar (*Show me*, and *Open when I log in*), Accessibility (*Allow*), the microphone (*Allow*, for talking back), Lock In Extended (*Get it* opens the download and your browser's extensions page, with the three steps to add it), and your calendar (*Connect* reads the calendars already on your Mac; if your Google account isn't there yet, *Add Google account* opens Internet Accounts and Lock In picks it up by itself). Anything skipped is in *Settings*.
    - Everything else (work apps and sites, the coach's style, check-ins) starts from sensible defaults and lives in Settings and on the Coach page.
 2. **Follow *Settings → Permissions*:**
    - Allow **Accessibility**. While running from source, macOS lists the app as **Electron**; turn it on there.
-   - Load the browser extension: `npm run build` puts it in `dist/extension`. Open `chrome://extensions`, turn on **Developer mode**, click **Load unpacked**, and pick that folder. (It's [Lock In Extended](#lock-in-extended-the-chrome-extension), which also works without the Mac app.)
+   - Add the browser extension: download `Lock-In-Extended.zip` from the [releases page](https://github.com/gracezrx/lock-in/releases/latest) (or build it with `npm run build:extension`, into `dist/extension`). Open `chrome://extensions`, turn on **Developer mode**, click **Load unpacked**, and pick the unzipped folder. (It's [Lock In Extended](#lock-in-extended-the-chrome-extension), which also works without the Mac app.)
    - Allow the **microphone** if you want to answer the coach out loud.
 3. **Add keys (optional)** in *Settings → Keys*:
    - A [Claude API key](https://console.anthropic.com/) gives live, specific coach lines, spoken back-and-forth, and labeling of sites it hasn't seen.
@@ -169,7 +171,7 @@ It works two ways, and switches by itself:
 - **On its own** (no Mac app, or not a Mac): the same engine as the Mac app runs on Chrome's tabs. The same drift ladder: a corner card, then it talks, then a card covers the page until you choose, then the site is blocked until the session ends. Crews work too (the same relay and encryption as the Mac app, so Chrome and Mac friends share a crew).
 - **Linked to Lock In for Mac**: the moment the Mac app is open, the extension links up over `127.0.0.1` and becomes the same you: your profile and coach, site labels, crew (as the same member, not a second one), to-dos, goals and today's meetings. The Mac does the coaching (it sees every app, not just Chrome) and the panel drives it. A session running in Chrome moves to the Mac; sessions you ran in Chrome alone go into your Mac history, and to-dos you added there go onto your Mac's list. Quit the Mac app mid-session and Chrome picks the session up where it was.
 
-Build it with `npm run build` (it lands in `dist/extension`), or `npm run extension:zip` for the Chrome Web Store upload (`release/Lock-In-Extended-<version>.zip`).
+It ships separately from the Mac app: download `Lock-In-Extended.zip` from the [releases page](https://github.com/gracezrx/lock-in/releases/latest), or build it with `npm run build:extension` (it lands in `dist/extension`), or `npm run extension:zip` for the release and Chrome Web Store upload (`release/Lock-In-Extended.zip`).
 
 ## Lock in with friends
 
@@ -361,12 +363,20 @@ test/                   engine, coach and bridge tests
 ## Privacy
 
 - Everything is stored on your Mac in `~/Library/Application Support/Lock In`. Your own voice is never stored. Recordings you give a coach made from someone are kept in its folder (`coaches/`) until you remove them; backups keep their transcripts, not the audio.
-- Nothing about which apps or sites you use is recorded outside a session, and Claude is only asked to label things during a session. Outside sessions Lock In only counts active minutes (for to-do roasts and routines) and, for Goals, when you were at the computer and when you stepped away (`rhythm.json`: times and totals only). Which cards you act on or ignore is kept as counts per kind of card (`attention.json`). *Delete all activity* deletes both.
+- Nothing about which apps or sites you use is recorded outside a session (unless you share app usage, below), and Claude is only asked to label things during a session. Outside sessions Lock In only counts active minutes (for to-do roasts and routines) and, for Goals, when you were at the computer and when you stepped away (`rhythm.json`: times and totals only). Which cards you act on or ignore is kept as counts per kind of card (`attention.json`). *Delete all activity* deletes both.
 - To-do titles stay on your Mac unless you have a Claude key, in which case the top task's title is included when the coach writes a line. For big goals, the coach also sees each goal's title, reason and list, and (once a day) the names and projects you keep coming back to, with a few of the to-do, session and meeting titles they came from.
 - Only a small context (app name, site, page title, your goal) goes to Claude, with emails and numbers stripped. *Keep titles on this Mac* sends the site name only.
 - Incognito windows, password managers and banking sites are logged as "private" with no details.
 - The extension talks to the app over `127.0.0.1` and the app accepts only browser-extension connections, not web pages. On its own, Lock In Extended keeps everything in Chrome's local storage; see [its privacy policy](docs/extension-privacy.md).
 - *Settings → Your data* backs up, restores or deletes everything.
+
+### Usage data
+
+To see which features people use, the installed app sends anonymous usage data to Lock In's Supabase project every few minutes (never from `npm run dev` or the tests). Setup asks, and *Settings → Usage data* turns each part off, shows exactly what's sent next, and deletes what's been sent.
+
+- **Which features you use** (on unless you turn it off): a random install id (no name, email or account), the app and macOS version, how you're set up (personality, which keys are added, extension, calendar and to-do provider on or off), and events: sessions started and ended (length, focus and drift minutes), coach levels, talking back, crews and bombs, setup steps, which page is open, and a count of each button and action. Never your goals, to-dos, calendar, window titles, what you type or what the coach says.
+- **Which apps and sites you use** (only if you pick *Share it*): seconds per day in each app, and each site in the browser (the domain only), with how Lock In labeled it (work, neutral, distraction) and whether it was during a session. Never window titles, page addresses or files. Apps you mark sensitive, password managers, banking sites, private windows and incognito tabs are counted only as "(private)". Turning it off deletes what was sent.
+- The app's key is Supabase's publishable key: it can only add rows through one function (`ingest`), never read anything back. `LOCKIN_TELEMETRY=off` turns it all off; the schema is in [`docs/supabase.sql`](docs/supabase.sql).
 
 ## Development
 
@@ -398,8 +408,8 @@ Packaging: `npm run dist` builds an unsigned `.dmg` with electron-builder. For o
 ## Troubleshooting
 
 - **"Window sensor off"**: run `npm run helper` and check *Settings → Activity log*. Accessibility must be on for **Electron** (dev) or **Lock In** (packaged).
-- **The extension doesn't do something new after an update**: open `chrome://extensions` and press the reload arrow on Lock In Extended once (Settings says when). From 0.2.0 on it reloads itself after updates.
-- **Two Lock In extensions in Chrome**: before 1.0 the extension was called "Lock In" and lived in this project's `extension` folder. Remove that one and keep Lock In Extended (from `dist/extension` or the Chrome Web Store).
+- **"Extension too old"**: download the new `Lock-In-Extended.zip` from the releases page, remove the old one in `chrome://extensions` and add the new folder.
+- **Two Lock In extensions in Chrome**: before 1.0 the extension was called "Lock In" and lived inside the app. Remove that one and keep Lock In Extended (from the releases page or `dist/extension`).
 - **"Browser not connected"**: make sure the extension is loaded and enabled, then click its toolbar icon and press *Reconnect*. Port 47615 must be free.
 - **Talking says "Voice is off"**: the message says why. Usually the ElevenLabs key is missing *ElevenAgents: Write*; edit the key at elevenlabs.io and paste it again. If the mic never opens, allow Lock In under *System Settings → Privacy and Security → Microphone*.
 - **No voice**: check the volume cap in *Coach*, quiet hours, and whether you're in a call. *Play a test line* checks the voice on its own.

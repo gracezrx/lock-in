@@ -13,7 +13,7 @@ const SETTINGS: Settings = {
   notify: DEFAULT_NOTIFY, sounds: DEFAULT_SOUNDS, ntfyServer: 'https://ntfy.sh', ntfyTopic: '', webhookUrl: '', todo: DEFAULT_TODO,
   voiceId: 'v', ttsModelLive: 'flash', ttsModelShout: 'v3', sttModel: 'scribe_v2', sayVoice: '', coachModel: 'c', classifierModel: 'h',
   volumeCap: 0.8, quietStart: '00:00', quietEnd: '00:00', profanityOk: false, titlesStayLocal: false, maxSpokenPerHour: 6,
-  commitmentMode: false, sensitiveDomains: [], sensitiveApps: [], breakMinutes: 7, talk: DEFAULT_TALK, calendar: DEFAULT_CALENDAR, exportCsv: DEFAULT_EXPORT, crew: DEFAULT_CREW, phone: { enabled: false }, look: { theme: 'jail', keyCursor: true }, goals: { enabled: true, suggest: true, nudges: true }, attention: { pauses: true, maxPerDay: 12, minGapMin: 20 }, ui: 'panel',
+  commitmentMode: false, sensitiveDomains: [], sensitiveApps: [], breakMinutes: 7, talk: DEFAULT_TALK, calendar: DEFAULT_CALENDAR, exportCsv: DEFAULT_EXPORT, crew: DEFAULT_CREW, phone: { enabled: false }, look: { theme: 'jail', keyCursor: true }, goals: { enabled: true, suggest: true, nudges: true }, attention: { pauses: true, maxPerDay: 12, minGapMin: 20 }, ui: 'panel', telemetry: { features: false, apps: false, asked: true },
 };
 
 function yt(over: Partial<LabeledSample> = {}): LabeledSample {
