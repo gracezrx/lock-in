@@ -28,11 +28,6 @@ export function calendarReaderPath(): string | null {
   return existsSync(p) ? p : null;
 }
 
-/** Lock In Extended, built into dist/extension (the runtime also keeps a copy at extension/ for older installs). */
-export function extensionPath(): string {
-  return firstExisting(join(distDir, 'extension'), join(appRoot, 'extension'), join(process.resourcesPath ?? '', 'extension'));
-}
-
 export function assetPath(name: string): string {
   return firstExisting(join(appRoot, 'assets', name), join(app.getAppPath(), 'assets', name));
 }

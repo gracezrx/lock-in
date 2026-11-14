@@ -103,7 +103,7 @@
       doc.head.append(st);
       const b = doc.createElement('span');
       b.id = 'extBtn';
-      b.innerHTML = '<img src="/dist/extension/icons/icon48.png" alt="">';
+      b.innerHTML = '<img src="/src/extension/static/icons/icon48.png" alt="">';
       bar.append(b);
       extReady = true;
     }

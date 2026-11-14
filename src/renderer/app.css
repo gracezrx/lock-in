@@ -941,3 +941,20 @@ html.jail .quiz-foot { background: rgba(23, 32, 35, 0.94); border-top-color: var
   .connect-row { grid-template-columns: 30px minmax(0, 1fr); }
   .connect-actions { grid-column: 2; align-items: flex-start; }
 }
+
+/* setup: the coach's keys, and the usage-data question */
+.onb-tip { margin-top: 16px; max-width: 64ch; }
+.onb-key { max-width: 640px; margin-top: 16px; padding: 14px 16px 16px; border-radius: var(--r-md); border: 1px solid var(--line-soft); background: var(--paper); }
+.onb-key-head { display: flex; align-items: baseline; justify-content: space-between; gap: 12px; }
+.onb-key-head b { font-size: 16px; }
+.onb-key-head a { color: inherit; font-size: 14px; font-weight: 600; text-decoration: underline; text-underline-offset: 3px; }
+.onb-key .sub { margin: 4px 0 0; }
+.onb-key .add-row { align-items: center; margin-top: 10px; }
+.onb-key .add-row input { max-width: none; }
+.consent-row { display: grid; grid-template-columns: auto minmax(0, 1fr); gap: 14px; align-items: start; max-width: 680px; padding: 14px 0; border-bottom: 1px solid var(--line-soft); }
+.consent-row b, .consent-apps > b { display: block; font-size: 16px; }
+.consent-row small, .consent-apps > small { display: block; margin-top: 4px; color: var(--ink-2); font-size: 14px; line-height: 1.45; max-width: 60ch; }
+.consent-apps { max-width: 680px; padding: 16px 0 0; }
+.consent-pick { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; max-width: 520px; margin-top: 14px; }
+.consent-pick .seg b { font-size: 26px; }
+.quiz-next:disabled { opacity: 0.45; cursor: not-allowed; }

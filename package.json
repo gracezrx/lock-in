@@ -1,7 +1,7 @@
 {
   "name": "lock-in",
   "productName": "Lock In",
-  "version": "0.3.0",
+  "version": "0.4.0",
   "description": "A desktop focus coach that watches what you work on and talks (then yells) you back to work.",
   "type": "module",
   "main": "dist/main/index.js",
@@ -10,6 +10,7 @@
   "repository": "github:gracezrx/lock-in",
   "scripts": {
     "build": "node build.mjs",
+    "build:extension": "node build.mjs extension",
     "helper": "bash native/mac-helper/build.sh",
     "dev": "npm run helper && npm run build && electron .",
     "start": "npm run build && electron .",
@@ -21,7 +22,7 @@
     "demo:launch": "node scripts/demo/launch/record.mjs",
     "demo:walkthrough": "node scripts/demo/launch/record.mjs --film walkthrough && node scripts/demo/launch/record.mjs --film walkthrough --prompter",
     "package:mac": "npm run helper && npm run build && node scripts/package-mac.mjs",
-    "extension:zip": "npm run build && node scripts/extension-zip.mjs"
+    "extension:zip": "npm run build:extension && node scripts/extension-zip.mjs"
   },
   "dependencies": {
     "@elevenlabs/client": "1.30.0",
@@ -52,14 +53,11 @@
     "productName": "Lock In",
     "files": [
       "dist/**/*",
+      "!dist/extension/**",
       "assets/**/*",
       "package.json"
     ],
     "extraResources": [
-      {
-        "from": "dist/extension",
-        "to": "extension"
-      },
       {
         "from": "native/mac-helper/build/lockin-helper",
         "to": "lockin-helper"

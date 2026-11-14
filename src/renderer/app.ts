@@ -8,6 +8,7 @@ import {
   DEFAULT_TODO, NOTIFY_KINDS, ROLE_ORDER, ROLE_TEMPLATES, ROUTINE_HELP, SOUNDS, TODO_PROVIDERS, buildDefaultProfile, combineRoles, suggestWorkApps,
 } from '../shared/templates';
 import { api, clear, clockTime, h, mmss, plural } from './lib';
+import { EXTENSION_DOWNLOAD, KEY_PAGES } from '../shared/links';
 import { playIntro } from './intro';
 import { leaveCoachPage, renderCoachPage } from './coachmaker';
 import { goalStrip, reachSection, renderGoals, rhythmSection } from './goals';
@@ -61,6 +62,11 @@ function scrollToAnchor(): void {
   el.scrollIntoView({ block: 'start' });
 }
 
+/** Anonymous usage data (Settings → Your data): setup's steps, choices and which page is open. */
+function track(name: string, props?: Record<string, string | number | boolean | null>): void {
+  void api.invoke('telemetry:track', name, props).catch(() => undefined);
+}
+
 function go(r: string): void {
   if (r === 'quiz') {
     void openQuiz();
@@ -80,6 +86,7 @@ function go(r: string): void {
   if (panelMode() && (r === 'home' || r === 'progress')) r = 'settings';
   // A new page is a cell you just unlocked: the door slides away (not on the first page).
   if (route !== r && booted) cellDoor();
+  if (route !== r || !booted) track('page_view', { page: r.startsWith('coach/') ? 'coach/person' : r });
   route = r;
   if (location.hash.slice(1) !== r) history.replaceState(null, '', `#${r}`);
   // A coach made from someone lives under Coach.
@@ -1623,7 +1630,7 @@ async function renderSettingsPage(): Promise<void> {
     e.preventDefault();
     document.getElementById(id)?.scrollIntoView({ block: 'start', behavior: 'smooth' });
   };
-  const jump: [string, string][] = [['profile-sec', 'Profile'], ['perm-sec', 'Permissions'], ['keys-sec', 'Keys'], ['notif-sec', 'Notifications'], ['routines-sec', 'Routines'], ['calendar-sec', 'Calendar'], ['phone-sec', 'Phone'], ['look-sec', 'Look'], ['data-sec', 'Your data']];
+  const jump: [string, string][] = [['profile-sec', 'Profile'], ['perm-sec', 'Permissions'], ['keys-sec', 'Keys'], ['notif-sec', 'Notifications'], ['routines-sec', 'Routines'], ['calendar-sec', 'Calendar'], ['phone-sec', 'Phone'], ['look-sec', 'Look'], ['data-sec', 'Your data'], ['usage-sec', 'Usage data']];
   const page = h(
     'section',
     { class: 'page settings-page' },
@@ -1657,13 +1664,13 @@ async function renderSettingsPage(): Promise<void> {
       s.extensionConnected,
       'Add the browser extension',
       [
-        h('p', null, 'Works in Chrome, Arc, Brave and Edge. Press the button: your browser opens on its extensions page and Finder shows the extension folder. Turn on Developer mode (top right) and drag the folder onto the page. (Or choose Load unpacked, press ⌘⇧G and paste: the folder’s address is already copied.)'),
+        h('p', null, 'Lock In Extended is a separate download that works in Chrome, Arc, Brave and Edge. Press the button: the download page and your browser’s extensions page open. Unzip ', h('b', null, 'Lock-In-Extended.zip'), ', turn on Developer mode (top right) and drag the folder onto the page (or click Load unpacked and pick it).'),
         h('p', null, s.extensionConnected ? 'Connected.' : 'Not connected yet. Keep Lock In running and the extension connects within 30 seconds.'),
         s.extensionOutdated
-          ? h('p', { class: 'sheet-error' }, 'Lock In was updated and the extension needs one reload: open ', h('code', null, 'chrome://extensions'), ' and press the reload arrow ↻ on Lock In Extended. After this, updates reload it on their own.')
+          ? h('p', { class: 'sheet-error' }, 'This version of Lock In Extended is too old for this Lock In. Download the new one (the button below), and in ', h('code', null, 'chrome://extensions'), ' remove the old one and add the new folder.')
           : null,
       ].filter(Boolean) as Node[],
-      s.extensionConnected ? undefined : h('button', { class: 'btn btn-small', type: 'button', onclick: () => void api.invoke('setup:addExtension') }, mac ? 'Add to browser' : 'Show the folder'),
+      s.extensionConnected && !s.extensionOutdated ? undefined : h('button', { class: 'btn btn-small', type: 'button', onclick: () => void api.invoke('setup:addExtension') }, s.extensionOutdated ? 'Get the new version' : 'Get Lock In Extended'),
     ),
     step(
       s.microphone === 'granted' || s.microphone === 'n/a',
@@ -1709,6 +1716,7 @@ async function renderSettingsPage(): Promise<void> {
   page.append(await goalsBetaSection());
   page.append(await exportSection());
   page.append(await dataSection());
+  page.append(usageDataSection(st, saveSt));
 
   const logBox = h('pre', { class: 'log', hidden: true });
   page.append(
@@ -1935,12 +1943,50 @@ async function dataSection(): Promise<HTMLElement> {
   );
 }
 
+/** Settings → Usage data: what's shared with Lock In's maker, exactly what's sent, and deleting it. */
+function usageDataSection(st: Settings, saveSt: (p: Partial<Settings>) => void): HTMLElement {
+  const t = { ...(st.telemetry ?? { features: true, apps: false, asked: false }) };
+  const note = h('p', { class: 'muted', 'aria-live': 'polite' });
+  const preview = h('pre', { class: 'log', hidden: true });
+  const set = (patch: Partial<typeof t>) => {
+    Object.assign(t, patch, { asked: true });
+    if (!t.features) t.apps = false;
+    saveSt({ telemetry: { ...t } });
+    void renderSettingsPage();
+  };
+  return h(
+    'div',
+    { class: 'section', id: 'usage-sec' },
+    h('h2', null, 'Usage data'),
+    h('p', { class: 'sub' }, 'Anonymous, under a random id (no name, email or account), to help make Lock In better. Everything else stays on this Mac.'),
+    field('Share which features I use', 'Sessions, when the coach speaks, talking back, bombs, which buttons get pressed. Never your goals, to-dos, what you type or what the coach says.', sw(t.features, (v) => set({ features: v }), 'Share which features I use')),
+    field('Share which apps and sites I use', 'Time per day in each app and site, and whether it counted as work or a distraction. Never window titles, page addresses or files. Sensitive apps and private windows show up only as “private”.', sw(t.features && t.apps, (v) => set({ apps: v, features: t.features || v }), 'Share which apps and sites I use')),
+    h(
+      'div',
+      { class: 'test-row' },
+      h('button', { class: 'btn btn-small btn-quiet', type: 'button', onclick: async () => {
+        const p = await api.invoke<Record<string, unknown>>('telemetry:payload');
+        preview.textContent = p.on ? JSON.stringify(p, null, 2) : 'Nothing is being shared.';
+        preview.hidden = !preview.hidden;
+      } }, 'See what’s sent next'),
+      h('button', { class: 'btn btn-small btn-quiet', type: 'button', onclick: async () => {
+        if (!confirm('Delete everything this Mac has shared, and stop sharing?')) return;
+        const ok = await api.invoke<boolean>('telemetry:forget');
+        if (ok) set({ features: false, apps: false });
+        note.textContent = ok ? 'Deleted, and sharing is off.' : 'Couldn’t reach the server. Try again when you’re online.';
+      } }, 'Delete what’s been shared'),
+    ),
+    note,
+    preview,
+  );
+}
+
 // -----------------------------------------------------------------------------
 // Setup
 
-// Setup is three questions: what you're going after, what's on today, and what pulls you off
-// track. Everything else (work apps, the coach's style, check-ins) starts from good defaults and
-// lives in Settings and on the Coach page.
+// Setup is five questions: what you're going after, what's on today, what pulls you off track,
+// who your coach is (and its keys), and whether to share usage data. Then the connections.
+// Everything else starts from good defaults and lives in Settings and on the Coach page.
 interface Draft {
   /** Big goals: what you're going after, and by when (optional). */
   bigGoals: { title: string; until: string }[];
@@ -1962,6 +2008,11 @@ interface Draft {
   firstRun: boolean;
   /** Big goals and habits you already have (doing setup again doesn't add them twice). */
   hadGoals: Set<string>;
+  /** The coach's personality. */
+  persona: Persona;
+  /** Usage data: features (on unless you turn it off) and app usage (your call, no default). */
+  shareFeatures: boolean;
+  shareApps: boolean | null;
 }
 
 let installed: AppUsage[] = [];
@@ -1984,6 +2035,7 @@ const siteChoices = () => DISTRACTION_CHOICES.filter((c) => c.domains.length);
 const toggleIn = <T,>(set: Set<T>, x: T) => (set.has(x) ? set.delete(x) : set.add(x));
 
 async function openQuiz(): Promise<void> {
+  settings = settings ?? (await api.invoke<Settings>('settings:get').catch(() => null));
   installed = await api.invoke<AppUsage[]>('quiz:apps').catch(async () => (await api.invoke<string[]>('quiz:installedApps').catch(() => [] as string[])).map((name) => ({ name, uses: 0, lastUsed: 0 })));
   const gv = await api.invoke<GoalsView>('goals:get').catch(() => null);
   const big = (gv?.goals ?? []).filter((g) => g.kind === 'custom' && !g.paused);
@@ -2011,6 +2063,9 @@ async function openQuiz(): Promise<void> {
     ),
     roles: new Set((p?.roles ?? (p ? [p.role] : [])).filter((r) => r !== 'other')),
     firstRun: !p,
+    persona: p?.persona ?? 'sassy',
+    shareFeatures: settings?.telemetry?.features ?? true,
+    shareApps: settings?.telemetry?.asked ? settings.telemetry.apps : null,
     hadGoals: new Set([...big.map((g) => (g.title ?? '').trim().toLowerCase()), ...(gv?.goals ?? []).filter((g) => g.kind !== 'custom').map((g) => `kind:${g.kind}`)]),
   };
   qStep = 0;
@@ -2193,26 +2248,117 @@ const QUIZ: QStep[] = [
       return wrap;
     },
   },
+  {
+    id: 'coach',
+    title: 'Who’s going to yell at you?',
+    lede: 'Pick a personality. The coach notices when you drift, talks you back, and gets louder if you don’t listen.',
+    body: () => {
+      const wrap = h('div', { class: 'onb' });
+      const grid = h('div', { class: 'choices' });
+      const drawGrid = () => {
+        clear(grid);
+        for (const x of PERSONAS) {
+          grid.append(h('button', { class: 'choice', type: 'button', 'aria-pressed': String(draft.persona === x.id), onclick: () => { draft.persona = x.id; drawGrid(); } }, h('b', null, x.name), h('small', null, x.desc), h('div', { class: 'persona-line' }, x.sample)));
+        }
+      };
+      drawGrid();
+      wrap.append(
+        grid,
+        h('p', { class: 'sub onb-tip' }, '💡 Want it to sound like your mom, or your boss? After setup, open ', h('b', null, 'Coach'), ' and make a coach from someone: drop in a few of their voice notes (with their OK) and they’re the one telling you to get back to work.'),
+        h('h3', { class: 'onb-sub' }, 'Give it a brain and a voice'),
+        h('p', { class: 'sub' }, 'Two keys, pasted once. Without them the coach still works, with pre-written lines and the Mac’s voice. Keys are stored in your Mac’s keychain and only ever sent to their own service. You pay each service directly for what you use.'),
+        onbKey('anthropic', 'Claude API key', 'Live, specific roasts and answers, and labeling sites Lock In doesn’t know. A day of coaching usually costs cents.', 'console.anthropic.com → API keys → Create key'),
+        onbKey('elevenlabs', 'ElevenLabs API key', 'The coach’s voice, hearing you talk back, and voices made from people you know. When you create the key, allow Text to Speech, Speech to Text, Voices and ElevenAgents (Write).', 'elevenlabs.io → Developers → API keys → Create'),
+        h('div', { class: 'test-row', style: 'margin-top:14px' },
+          h('button', { class: 'btn btn-small btn-ink', type: 'button', onclick: async (e: Event) => {
+            const b = e.currentTarget as HTMLButtonElement;
+            b.disabled = true;
+            track('coach_preview', { persona: draft.persona, from: 'setup' });
+            await api.invoke('voice:test').catch(() => undefined);
+            b.disabled = false;
+          } }, '▶ Hear your coach'),
+          h('span', { class: 'muted' }, 'Turn your sound on.'),
+        ),
+      );
+      return wrap;
+    },
+  },
+  {
+    id: 'data',
+    title: 'Help make Lock In better?',
+    lede: 'Lock In is made by one person. Seeing how it’s used, anonymously, is how it gets better. Your choice, and you can change it any time in Settings → Usage data.',
+    body: () => {
+      const wrap = h('div', { class: 'onb' });
+      const feat = h('div', { class: 'consent-row' },
+        sw(draft.shareFeatures, (v) => (draft.shareFeatures = v), 'Share which features I use'),
+        h('span', null, h('b', null, 'Which features I use'), h('small', null, 'Sessions started, when the coach speaks, talking back, bombs, which buttons get pressed. Never your goals, to-dos, what you type or what the coach says.')),
+      );
+      const pick = (v: boolean) => {
+        draft.shareApps = v;
+        drawQuiz();
+      };
+      const apps = h('div', { class: 'consent-apps' },
+        h('b', null, 'Which apps and sites I spend time in'),
+        h('small', null, 'Time per day in each app (and site, in the browser), and whether Lock In counted it as work or a distraction. Never window titles, page addresses, files or anything on screen. Apps you mark sensitive, private windows and incognito tabs show up only as “private”.'),
+        h('div', { class: 'consent-pick', role: 'group', 'aria-label': 'Share app usage' },
+          h('button', { class: 'seg', type: 'button', 'aria-pressed': String(draft.shareApps === true), onclick: () => pick(true) }, h('b', null, 'Share it'), h('span', null, 'anonymously, to improve Lock In')),
+          h('button', { class: 'seg', type: 'button', 'aria-pressed': String(draft.shareApps === false), onclick: () => pick(false) }, h('b', null, 'Keep it'), h('span', null, 'on this Mac only')),
+        ),
+      );
+      wrap.append(feat, apps, h('p', { class: 'muted', style: 'margin-top:18px' }, 'Either way, everything Lock In knows about your day stays on this Mac. Shared data goes under a random id (no name, email or account), and Settings → Usage data shows exactly what’s sent and can delete it.'));
+      return wrap;
+    },
+    nextLabel: () => (draft.shareApps === null ? 'Pick one above' : 'Finish'),
+  },
 ];
+
+/** A key, pasted during setup: where to get it, and a tick once it's saved. */
+function onbKey(name: 'anthropic' | 'elevenlabs', label: string, what: string, how: string): HTMLElement {
+  const has = () => !!state?.keys?.[name];
+  const input = h('input', { type: 'password', placeholder: has() ? 'Saved ✓  Paste a new key to replace it' : 'Paste your key', autocomplete: 'off', spellcheck: 'false', 'aria-label': label });
+  const note = h('span', { class: 'saved' }, has() ? '✓ Saved' : '');
+  const save = async () => {
+    const v = input.value.trim();
+    if (!v) return;
+    const ks = await api.invoke<KeyStatus>('keys:save', { [name]: v });
+    input.value = '';
+    input.placeholder = ks[name] ? 'Saved ✓  Paste a new key to replace it' : 'Paste your key';
+    note.textContent = ks[name] ? (ks.encrypted ? '✓ Saved in your keychain' : '✓ Saved') : '';
+    track('onboarding_connected', { item: `${name}_key` });
+  };
+  input.addEventListener('keydown', (e) => {
+    if (e.key === 'Enter') void save();
+  });
+  input.addEventListener('paste', () => setTimeout(() => void save(), 50));
+  return h('div', { class: 'onb-key' },
+    h('div', { class: 'onb-key-head' }, h('b', null, label), h('a', { href: '#', onclick: (e: Event) => { e.preventDefault(); void api.invoke('setup:openUrl', KEY_PAGES[name]); } }, 'Get a key ↗')),
+    h('p', { class: 'sub' }, what, ' ', h('span', { class: 'muted' }, how)),
+    h('div', { class: 'add-row' }, input, h('button', { class: 'btn btn-ink', type: 'button', onclick: () => void save() }, 'Save'), note),
+  );
+}
 
 let drawnStep = -1;
 let quizNext: HTMLButtonElement | null = null;
 
 function refreshQuizFoot(): void {
   const step = QUIZ[qStep];
-  if (!quizNext || !step || qStep === QUIZ.length - 1) return;
-  quizNext.textContent = step.nextLabel?.() ?? 'Next';
+  if (!quizNext || !step) return;
+  const last = qStep === QUIZ.length - 1;
+  quizNext.textContent = step.nextLabel?.() ?? (last ? 'Finish' : 'Next');
+  // The last question has no default answer.
+  quizNext.disabled = last && draft.shareApps === null;
 }
 
 function drawQuiz(): void {
   qStep = Math.max(0, Math.min(qStep, QUIZ.length - 1));
   const keep = drawnStep === qStep ? quizEl.scrollTop : 0;
+  if (drawnStep !== qStep) track('onboarding_step', { step: QUIZ[qStep].id, index: qStep + 1, first_run: draft.firstRun });
   drawnStep = qStep;
   clear(quizEl);
   const step = QUIZ[qStep];
   const last = qStep === QUIZ.length - 1;
   quizNext = h('button', { class: `btn quiz-next ${last ? 'btn-primary' : 'btn-ink'}`, type: 'button', onclick: () => (last ? void finishQuiz() : (qStep++, drawQuiz())) }, last ? 'Finish' : 'Next');
-  const back = h('button', { class: 'btn btn-quiet', type: 'button', onclick: () => { if (qStep === 0) { quizEl.hidden = true; if (!profile) go('home'); } else { qStep--; drawQuiz(); } } }, qStep === 0 ? (profile ? 'Cancel' : 'Skip setup') : 'Back');
+  const back = h('button', { class: 'btn btn-quiet', type: 'button', onclick: () => { if (qStep === 0) { track('onboarding_skipped', { first_run: draft.firstRun }); quizEl.hidden = true; if (!profile) go('home'); } else { qStep--; drawQuiz(); } } }, qStep === 0 ? (profile ? 'Cancel' : 'Skip setup') : 'Back');
   quizEl.append(
     h(
       'div',
@@ -2283,10 +2429,18 @@ async function finishQuiz(): Promise<void> {
     if (offered && !picks.some((x) => sameApp(x, a))) delete p.distractionApps[a];
   }
   for (const a of picks) p.distractionApps[a] = p.distractionApps[a] ?? Math.round((COMMON_DISTRACTION_APPS[a] ?? 1.2) * 10) / 10;
+  if (draft.persona !== p.persona) {
+    p.persona = draft.persona;
+    p.customCoach = undefined;
+  }
   await api.invoke('profile:save', p);
   profile = p;
   const cur = settings ?? (await api.invoke<Settings>('settings:get'));
-  settings = await api.invoke<Settings>('settings:save', { todo: { ...cur.todo, provider: draft.todoProvider, remindersList: draft.remindersList.trim(), sheet: draft.sheet } });
+  settings = await api.invoke<Settings>('settings:save', {
+    todo: { ...cur.todo, provider: draft.todoProvider, remindersList: draft.remindersList.trim(), sheet: draft.sheet },
+    telemetry: { features: draft.shareFeatures, apps: draft.shareFeatures && draft.shareApps === true, asked: true },
+  });
+  track('onboarding_finished', { first_run: draft.firstRun, goals: draft.bigGoals.filter((g) => g.title.trim()).length, habits: draft.habits.size, todos: draft.todayTodos.length, todo_provider: draft.todoProvider, distractions: draft.distractions.size + draft.customDistractions.length + draft.distractionApps.size, roles: [...draft.roles].join(','), persona: draft.persona, share_apps: draft.shareApps === true });
   if (draft.todoProvider === 'todoist' && draft.todoistToken) await api.invoke('keys:save', { todoist: draft.todoistToken });
 
   // Your goals and today's to-dos (doing setup again doesn't add the same ones twice).
@@ -2314,9 +2468,10 @@ async function finishQuiz(): Promise<void> {
 }
 
 /**
- * Setup's last screen: what was saved, then the four things that make Lock In work, each one or
- * two clicks, ticking themselves off as they happen: the padlock in the menu bar, Accessibility,
- * the browser extension and the calendar. Any of them can wait; Settings has them all.
+ * Setup's last screen: what was saved, then the things that make Lock In work, each one or two
+ * clicks, ticking themselves off as they happen: the padlock in the menu bar, Accessibility, the
+ * microphone, Lock In Extended (its own download) and the calendar. Any of them can wait;
+ * Settings has them all.
  */
 let connectRun = 0;
 function drawQuizDone(n: { goals: number; habits: number; todos: number | null; distractions: number }): void {
@@ -2339,12 +2494,14 @@ function drawQuizDone(n: { goals: number; habits: number; todos: number | null; 
   let calNote = '';
   let peeked = false;
   let extOpened: string | null = null;
+  const ticked = new Set<string>();
   let browsers: { id: string; name: string }[] = [];
   let waitAccounts = 0;
 
   const rows = h('ol', { class: 'connect' });
   const doneCount = h('span', { class: 'muted' });
   const finish = h('button', { class: 'btn btn-primary quiz-open', type: 'button', onclick: () => {
+    track('onboarding_done', { connected: ticked.size });
     quizEl.hidden = true;
     connectRun++;
     if (panel) void api.invoke('panel:show');
@@ -2373,13 +2530,14 @@ function drawQuizDone(n: { goals: number; habits: number; todos: number | null; 
   const draw = (force = true) => {
     if (!live() || !s) return;
     // The poll redraws only when something changed (so a click is never lost mid-redraw).
-    const key = JSON.stringify([s.accessibility, s.extensionConnected, s.openAtLogin, cal?.on, cal?.status, cal?.calendars.length, calCount, calNote, peeked, extOpened, waitAccounts > 0, browsers.length]);
+    const key = JSON.stringify([s.accessibility, s.microphone, s.extensionConnected, s.openAtLogin, cal?.on, cal?.status, cal?.calendars.length, calCount, calNote, peeked, extOpened, waitAccounts > 0, browsers.length]);
     if (!force && key === drawn) return;
     drawn = key;
     const mac = s.platform === 'darwin';
     const accOk = s.accessibility !== 'missing';
     const calOk = !!cal?.on && cal.status === 'granted' && calCount > 0;
     const padOk = peeked || s.openAtLogin;
+    const micOk = s.microphone === 'granted' || s.microphone === 'n/a';
     const extOk = s.extensionConnected;
     const hasAccount = !!cal?.calendars.some((c) => c.source.includes('@'));
     clear(rows);
@@ -2398,24 +2556,30 @@ function drawQuizDone(n: { goals: number; habits: number; todos: number | null; 
       'macOS asks once: switch on Lock In under Accessibility. It reads window titles and the open file, never what you type or your screen.',
     ], [!accOk && mac ? h('button', { class: 'btn btn-small btn-ink', type: 'button', onclick: () => void api.invoke('setup:promptAccessibility') }, 'Allow') : null]));
 
-    // 3. The browser extension
+    // 3. The microphone
+    rows.append(row('microphone', micOk, 'Let it hear you talk back', [
+      `Answer the coach out loud (“I’m on it”, “five more minutes”), or hold Space or press ${MOD}Space to talk to it any time. The mic is on only while you’re talking to it.`,
+      s.microphone === 'denied' ? h('p', { class: 'muted' }, 'It was turned off: System Settings → Privacy & Security → Microphone → Lock In.') : null,
+    ], [!micOk && mac && s.microphone !== 'denied' ? h('button', { class: 'btn btn-small btn-ink', type: 'button', onclick: async () => { s = await api.invoke<SetupStatus>('setup:askMic'); draw(); } }, 'Allow') : null]));
+
+    // 4. Lock In Extended, the Chrome extension (its own download)
     const b = browsers[0];
     const extSteps = extOpened
       ? h('ol', { class: 'connect-steps' },
-          h('li', null, `In ${extOpened}, turn on `, h('b', null, 'Developer mode'), ' (top right).'),
-          h('li', null, 'Drag the highlighted ', h('b', null, 'extension'), ' folder from the Finder window onto the page.'),
-          h('li', { class: 'muted' }, 'Or click ', h('b', null, 'Load unpacked'), ', press ⌘⇧G, then ⌘V and Return (the folder’s address is already copied), and click Select.'),
+          h('li', null, 'On the page that opened, download ', h('b', null, 'Lock-In-Extended.zip'), ' and double-click it to unzip.'),
+          h('li', null, `In ${extOpened}’s extensions page, turn on `, h('b', null, 'Developer mode'), ' (top right).'),
+          h('li', null, 'Drag the unzipped ', h('b', null, 'Lock-In-Extended'), ' folder onto the page (or click ', h('b', null, 'Load unpacked'), ' and pick it).'),
         )
       : null;
-    rows.append(row('extension', extOk, 'Add the browser extension', [
-      extOk ? 'Connected. Lock In knows the site you’re on, and can lock it when a friend bombs you.' : 'So Lock In knows which site you’re on, and can lock it when a friend bombs you. Takes about 30 seconds.',
+    rows.append(row('extension', extOk, 'Add Lock In Extended to your browser (optional)', [
+      extOk ? 'Connected. Lock In knows the site you’re on, and can lock it when a friend bombs you.' : 'The Chrome extension: Lock In sees which site you’re on (not just “Chrome”), covers distracting tabs, and locks them when a friend bombs you. About a minute.',
       extOk ? null : extSteps,
-      !extOk && extOpened ? h('p', { class: 'muted' }, 'Waiting for the extension…') : null,
+      !extOk && extOpened ? h('p', { class: 'muted' }, 'Waiting for the extension… it connects by itself once it’s added.') : null,
       !extOk && !b && mac ? h('p', { class: 'muted' }, 'Works in Chrome, Arc, Brave and Edge.') : null,
       !extOk && browsers.length > 1 ? h('p', { class: 'muted' }, 'Use another browser: ', ...browsers.slice(1).flatMap((x, i) => [i ? ', ' : '', h('a', { href: '#', onclick: (e: Event) => { e.preventDefault(); void addExt(x.id); } }, x.name)])) : null,
-    ], [extOk ? null : h('button', { class: 'btn btn-small btn-ink', type: 'button', onclick: () => void addExt(b?.id) }, b ? (extOpened ? `Open ${b.name} again` : `Open ${b.name}`) : 'Show the folder')]));
+    ], [extOk ? null : h('button', { class: 'btn btn-small btn-ink', type: 'button', onclick: () => void addExt(b?.id) }, extOpened ? 'Open again' : 'Get it')]));
 
-    // 4. The calendar
+    // 5. The calendar
     const calBtns: (Node | null)[] = [];
     if (cal?.available) {
       if (!calOk) calBtns.push(h('button', { class: 'btn btn-small btn-ink', type: 'button', onclick: async (e: Event) => { (e.currentTarget as HTMLButtonElement).disabled = true; calNote = 'Waiting for macOS… choose Allow Full Access.'; draw(); await checkCalendar(); draw(); } }, cal.on ? 'Try again' : 'Connect'));
@@ -2431,13 +2595,21 @@ function drawQuizDone(n: { goals: number; habits: number; todos: number | null; 
       waitAccounts && !hasAccount ? h('p', { class: 'muted' }, 'In Internet Accounts, choose Google, sign in and leave Calendars on. Lock In picks it up within a minute.') : null,
     ], calBtns));
 
-    const done = [padOk, accOk, extOk, calOk].filter(Boolean).length;
-    doneCount.textContent = done === 4 ? 'All four connected.' : `${done} of 4 connected. The rest can wait: it’s all in Settings.`;
-    finish.textContent = done === 4 ? (panel ? 'Open Lock In' : 'Start') : 'Done for now';
+    const all = { padlock: padOk, accessibility: accOk, microphone: micOk, extension: extOk, calendar: calOk };
+    for (const [item, ok] of Object.entries(all)) {
+      if (ok && !ticked.has(item)) {
+        ticked.add(item);
+        track('onboarding_connected', { item });
+      }
+    }
+    const done = Object.values(all).filter(Boolean).length;
+    const total = Object.keys(all).length;
+    doneCount.textContent = done === total ? 'All connected.' : `${done} of ${total} connected. The rest can wait: it’s all in Settings.`;
+    finish.textContent = done === total ? (panel ? 'Open Lock In' : 'Start') : 'Done for now';
   };
 
   const addExt = async (id?: string) => {
-    const r = await api.invoke<{ browser: string | null; path: string }>('setup:addExtension', id);
+    const r = await api.invoke<{ browser: string | null; url: string }>('setup:addExtension', id);
     extOpened = r.browser ?? 'your browser';
     draw();
   };
@@ -2447,7 +2619,7 @@ function drawQuizDone(n: { goals: number; habits: number; todos: number | null; 
       'div',
       { class: 'quiz-inner quiz-done' },
       h('h1', { class: 'display' }, 'Hook it up.'),
-      h('p', { class: 'lede' }, `Saved: ${savedLine}. Now four quick connections, a click or two each.`),
+      h('p', { class: 'lede' }, `Saved: ${savedLine}. Now a few quick connections, a click or two each.`),
       rows,
     ),
     h('div', { class: 'quiz-foot' }, doneCount, finish),
@@ -2964,7 +3136,7 @@ function notificationsSection(st: Settings, saveSt: (p: Partial<Settings>) => vo
   const test = (c: Channel, label: string) => h('button', { class: 'btn btn-small', type: 'button', onclick: async () => { result.textContent = '…'; result.textContent = await api.invoke<string>('notify:test', c); } }, label);
   const server = h('input', { type: 'text', value: st.ntfyServer, placeholder: 'https://ntfy.sh' });
   server.addEventListener('change', () => saveSt({ ntfyServer: server.value.trim() || 'https://ntfy.sh' }));
-  const topic = h('input', { type: 'text', value: st.ntfyTopic, placeholder: 'lockin-grace-7f3k2' });
+  const topic = h('input', { type: 'text', value: st.ntfyTopic, placeholder: 'lockin-sam-7f3k2' });
   topic.addEventListener('change', () => saveSt({ ntfyTopic: topic.value.trim() }));
   const hook = h('input', { type: 'password', value: st.webhookUrl, placeholder: 'https://hooks.slack.com/services/…', autocomplete: 'off' });
   hook.addEventListener('change', () => saveSt({ webhookUrl: hook.value.trim() }));

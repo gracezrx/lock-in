@@ -1,14 +1,22 @@
-// Bundles the main process (ESM), the preload script (CJS) and the renderer pages.
+// Builds Lock In into dist/:
+//   node build.mjs            the Mac app: main process (ESM), preload (CJS), renderer pages, phone page
+//   node build.mjs extension  Lock In Extended, the Chrome extension, on its own (dist/extension)
+//   node build.mjs app extension   both
+// The two ship separately: the Mac app never includes the extension.
 import { build } from 'esbuild';
 import { cpSync, mkdirSync, rmSync, readdirSync } from 'node:fs';
 import { join } from 'node:path';
 
 const root = new URL('.', import.meta.url).pathname;
 const out = join(root, 'dist');
-rmSync(out, { recursive: true, force: true });
-mkdirSync(join(out, 'renderer'), { recursive: true });
+const targets = new Set(process.argv.slice(2).length ? process.argv.slice(2) : ['app']);
+for (const t of targets) if (t !== 'app' && t !== 'extension') throw new Error(`Unknown build target: ${t} (app or extension)`);
 
 const common = { bundle: true, sourcemap: 'linked', logLevel: 'info', legalComments: 'none' };
+
+if (targets.has('app')) {
+for (const d of ['main', 'preload', 'renderer', 'phone']) rmSync(join(out, d), { recursive: true, force: true });
+mkdirSync(join(out, 'renderer'), { recursive: true });
 
 await build({
   ...common,
@@ -81,10 +89,15 @@ for (const f of readdirSync(join(root, 'src/renderer'))) {
   }
 }
 
+}
+
 // Lock In Extended, the Chrome extension: on its own it runs the same engine as the Mac app on
 // Chrome's tabs; linked to the Mac app it reports tabs and drives it. Built to dist/extension
-// (load it unpacked from there, or zip it for the Chrome Web Store with `npm run extension:zip`).
+// (load it unpacked from there, or zip it with `npm run extension:zip` for the release page and
+// the Chrome Web Store).
+if (targets.has('extension')) {
 const ext = join(out, 'extension');
+rmSync(ext, { recursive: true, force: true });
 mkdirSync(join(ext, 'fonts'), { recursive: true });
 /** The Mac-only bits the shared engine imports, swapped for their web versions. */
 const webShims = {
@@ -112,4 +125,5 @@ for (const [family, weights] of [['big-shoulders-display', ['800', '900']], ['pu
     cpSync(join(root, `node_modules/@fontsource/${family}/files/${file}`), join(ext, 'fonts', file));
   }
 }
-console.log('Build complete → dist/');
+}
+console.log(`Build complete (${[...targets].join(' + ')}) → dist/`);
