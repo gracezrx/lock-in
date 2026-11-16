@@ -9,6 +9,8 @@
 //   node scripts/demo/launch/record.mjs [--film walkthrough] [--prompter]
 //   node scripts/demo/launch/record.mjs --stills 3,12,23   (just those moments, as JPEGs)
 //   node scripts/demo/launch/record.mjs --only 4          (render one chunk again, then join)
+//   node scripts/demo/launch/record.mjs --film tour   the feature tour, docs/tour.mp4 (--nosubs: without
+//       subtitles, for cutting the README's GIF with scripts/demo/tour/gif.sh)
 //   node scripts/demo/launch/record.mjs --film walkthrough --take take.json --out screen.mp4
 //       ... --music off|only --wav stem.wav   (a sound stem on its own, for re-cutting)
 //       the walkthrough on a real take's clock (../walkthrough/take.js): a title card, the
@@ -142,7 +144,7 @@ const QUERY = {
   launch: { wide: '1', me: 'Grace', them: 'Sam', line: 'Your investors can hear you scrolling.', goal: 'Investor update', mygoal: 'Pitch deck' },
   walkthrough: { me: 'Sam', them: 'Grace', pronoun: 'she', crew: 'Friends', line: 'Your investors can hear you scrolling.', goal: 'Investor update', mygoal: 'Pitch deck' },
 }[FILM_NAME] ?? {};
-const q = new URLSearchParams({ ...QUERY, ...(PROMPTER ? { prompter: '1' } : {}), ...(TAKE ? { take: '1' } : {}) });
+const q = new URLSearchParams({ ...QUERY, ...(PROMPTER ? { prompter: '1' } : {}), ...(TAKE ? { take: '1' } : {}), ...(args.nosubs !== undefined ? { nosubs: '1' } : {}) });
 await page.goto(`http://127.0.0.1:${port}/film/index.html?${q}`, { waitUntil: 'load' });
 await page.waitForFunction(() => {
   if (window.ready) return window.ready();

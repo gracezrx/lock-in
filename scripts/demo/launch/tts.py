@@ -6,6 +6,7 @@
 #    kokoro-v1.0.int8.onnx and voices-v1.0.bin, in $KOKORO_DIR, default ~/.cache/kokoro)
 #   python3 scripts/demo/launch/tts.py               (the launch film)
 #   python3 scripts/demo/launch/tts.py walkthrough   (the walkthrough, ../walkthrough)
+#   python3 scripts/demo/launch/tts.py tour          (the feature tour, ../tour)
 import json, os, re, sys
 import numpy as np, soundfile as sf
 from kokoro_onnx import Kokoro
@@ -20,6 +21,8 @@ VOICES = {
     'you': ('af_heart', 1.12, 'en-us'),
     'coach': ('bm_george', 0.98, 'en-gb'),
     'sam': ('am_puck', 1.0, 'en-us'),
+    # You, in the tour: a different voice from the narrator's.
+    'me': ('af_bella', 1.08, 'en-us'),
 }
 # The lines live in film.js (one place for the words and their timing).
 src = open(os.path.join(HERE, 'film.js'), encoding='utf-8').read()

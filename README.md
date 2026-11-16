@@ -2,9 +2,23 @@
 
 **You drift. It notices. It drags you back.**
 
-![Lock In: a video tab gets a corner card, then the Lock In card slams down over it with a roast, and you're dragged back to your pitch deck](docs/demo.gif)
+[![Lock In in 90 seconds: setup, the coach escalating from a corner card to a red card, talking back, a coach in your mom's voice, to-do roasts, routines, calendar, friends' bombs, and your phone](docs/tour.gif)](docs/tour.mp4)
 
-A desktop focus coach for macOS with a mouth on it. A one-minute setup asks what you're going after, what's on today and what distracts you, it watches which app and site you are in, and when you drift it nudges, then talks, then yells you back to work ("why are you so locked out again?"), and reopens exactly what you were doing. It also reads your to-do list and roasts you when you've been on the computer for hours without finishing anything, runs your daily routines, and can reach you on every surface from a corner card to your phone.
+**▶ [Watch the 90-second tour with sound](docs/tour.mp4)**
+
+A focus coach for your Mac, with a mouth on it. Lock In knows which app and site you're in. When you drift it nudges, then talks, then yells you back to work ("why are we so locked out again?"), and reopens exactly what you were doing. A distraction blocker that argues back, built for ADHD brains and anyone with a YouTube problem.
+
+- **Sets up in a minute.** It asks what you're going after, what's on today, what pulls you off track, and who gets to yell at you.
+- **Knows where you are.** The app and site in front of you: window titles, never screenshots. Lock In Extended, the Chrome extension, adds your tabs.
+- **Escalates.** A corner card, then the coach's voice, then a full-screen yellow card, then a red one. Then it puts you back in your work.
+- **Lets you argue.** Hold Space or press ⌘⇧Space and talk back. It listens, answers, and ticks off what you say you got done.
+- **Sounds like anyone.** Pick a personality, from gentle friend to drill sergeant, or make the coach from a few voice notes of someone you can't ignore (with their OK), in their own language.
+- **Reads your to-dos.** Apple Reminders, Things, Todoist or a spreadsheet. It roasts you when you've been on for hours and finished nothing, and cheers when you finish.
+- **Runs your day.** Pomodoro and timed sessions, a morning kickoff, breaks, water, bedtime, goals it checks in on, and patterns it spots for you.
+- **Knows your calendar.** A heads-up before a meeting, and never a roast during one.
+- **Brings your friends.** Your crew sees who's drifting, and gets three bombs a day that lock every distraction on your Mac for five minutes.
+- **Finds you anywhere.** The menu bar, corner cards, full-screen cards, your phone and your browser.
+- **Stays private.** Everything it knows about your day stays on your Mac. Free and open source.
 
 ## Download
 
@@ -388,6 +402,7 @@ To see which features people use, the installed app sends anonymous usage data t
 npm test            # 225 tests: drift ladder, classifier, coach, extension bridge, to-do watchdog and providers, spreadsheets, routines, deadlines, voices, notifications, talking, calendar, export, crews and bombs, achievements, to-do history and backups
 npm run typecheck
 LOCKIN_SMOKE=1 npm start   # launches, exercises every window, a session, a typed and a voice conversation (against a stand-in server), the calendar and the export; prints SMOKE OK
+npm run demo:tour          # the 90-second feature tour, docs/tour.mp4, and its silent cut for this README, docs/tour.gif
 npm run demo               # re-records docs/demo.gif and docs/demo.mp4 (needs Playwright's Chromium and ffmpeg)
 npm run demo:bomb          # the vertical Lock In bomb clip, docs/bomb-demo.mp4 (try -- --them Maya --pronoun she)
 npm run demo:bomb:wide     # the same clip in landscape for X/Twitter, docs/bomb-demo-wide.mp4

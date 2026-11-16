@@ -24,6 +24,7 @@
     "demo:bomb:wide": "node scripts/demo/bomb/record.mjs --wide",
     "demo:launch": "node scripts/demo/launch/record.mjs",
     "demo:walkthrough": "node scripts/demo/launch/record.mjs --film walkthrough && node scripts/demo/launch/record.mjs --film walkthrough --prompter",
+    "demo:tour": "node scripts/demo/launch/record.mjs --film tour && bash scripts/demo/tour/gif.sh",
     "package:mac": "npm run helper && npm run build && node scripts/package-mac.mjs",
     "extension:zip": "npm run build:extension && node scripts/extension-zip.mjs"
   },

@@ -1,0 +1,112 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <title>Lock In: the tour</title>
+    <!-- The feature tour (1920x1080): everything Lock In does, chapter by chapter, on the app's own
+         screens (ui/, captured from the app). Every frame is drawn from a time t by render(t) in
+         film.js, so record.mjs captures it exactly:
+           python3 scripts/demo/launch/tts.py tour && node scripts/demo/launch/record.mjs --film tour -->
+    <link rel="stylesheet" href="/dist/renderer/base.css" />
+    <style>
+      *, *::before, *::after { animation: none !important; transition: none !important; box-sizing: border-box; }
+      html, body { width: 1920px; height: 1080px; margin: 0; overflow: hidden; }
+      body { position: relative; font-family: var(--body); color: #fff; background: #17142b; }
+      #bg { position: absolute; inset: 0; background:
+          radial-gradient(70% 80% at 10% 6%, rgba(255, 207, 0, 0.26) 0%, transparent 60%),
+          radial-gradient(80% 90% at 94% 104%, rgba(255, 106, 61, 0.5) 0%, transparent 62%),
+          linear-gradient(140deg, #221d44 0%, #351c45 52%, #552838 100%); }
+      #grain { position: absolute; inset: 0; opacity: 0.07; background-image: radial-gradient(rgba(255,255,255,0.6) 1px, transparent 1px); background-size: 4px 4px; }
+
+      .scene { position: absolute; inset: 0; opacity: 0; will-change: transform, opacity; }
+      .stage { position: absolute; inset: 0; transform-origin: 1300px 540px; }
+
+      /* The chapter's words, on the left */
+      .words { position: absolute; left: 110px; top: 0; bottom: 0; width: 600px; display: flex; flex-direction: column; justify-content: center; }
+      .kicker { font-family: var(--body); font-weight: 700; font-size: 22px; letter-spacing: 0.16em; text-transform: uppercase; color: var(--yellow); margin-bottom: 18px; }
+      .kicker b { display: inline-block; min-width: 46px; color: rgba(255, 255, 255, 0.45); font-weight: 700; }
+      .title { font-family: var(--display); font-weight: 900; font-size: 104px; line-height: 0.92; text-transform: uppercase; letter-spacing: 0.005em; color: #fff; }
+      .title em { font-style: normal; color: var(--yellow); }
+      .sub { margin-top: 22px; font-size: 26px; line-height: 1.4; font-weight: 500; color: rgba(255, 255, 255, 0.78); max-width: 560px; }
+      .chips { display: flex; flex-wrap: wrap; gap: 10px; margin-top: 26px; }
+      .chip { padding: 9px 16px 10px; border-radius: 999px; background: rgba(255, 255, 255, 0.1); box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.16); font-size: 21px; font-weight: 600; color: rgba(255, 255, 255, 0.85); opacity: 0; }
+      .chip.on { background: var(--yellow); color: var(--ink); box-shadow: none; }
+
+      /* Things on screen */
+      .layer { position: absolute; opacity: 0; transform-origin: 50% 50%; }
+      .layer img { display: block; width: 100%; height: auto; }
+      .win { border-radius: 14px; overflow: hidden; background: #182027; box-shadow: 0 0 0 1px rgba(255, 255, 255, 0.12), 0 40px 90px rgba(0, 0, 0, 0.5), 0 10px 24px rgba(0, 0, 0, 0.3); }
+      .win .bar { height: 34px; display: flex; align-items: center; gap: 9px; padding: 0 14px; background: #10161b; border-bottom: 1px solid rgba(255, 255, 255, 0.06); font-size: 14px; font-weight: 600; color: rgba(255, 255, 255, 0.5); }
+      .win .bar i { width: 13px; height: 13px; border-radius: 50%; }
+      .win .bar span { margin: 0 auto; padding-right: 70px; }
+      .card { border-radius: 16px; overflow: hidden; box-shadow: 0 30px 70px rgba(0, 0, 0, 0.45), 0 8px 18px rgba(0, 0, 0, 0.25); }
+      .bare { filter: drop-shadow(0 34px 50px rgba(0, 0, 0, 0.45)); }
+      .phone { padding: 14px; border-radius: 54px; background: #0b0d10; box-shadow: inset 0 0 0 2px #2a2e33, 0 40px 90px rgba(0, 0, 0, 0.5); }
+      .phone img { border-radius: 42px; }
+
+      /* The front app, read out (chapter 3) */
+      .front { width: 980px; padding: 22px 26px; border-radius: 18px; background: rgba(10, 14, 18, 0.82); box-shadow: 0 0 0 1px rgba(255, 255, 255, 0.1), 0 30px 70px rgba(0, 0, 0, 0.4); }
+      .front h4 { margin: 0 0 14px; font-size: 20px; font-weight: 700; letter-spacing: 0.12em; text-transform: uppercase; color: rgba(255, 255, 255, 0.5); }
+      .row { display: flex; align-items: center; gap: 18px; height: 96px; padding: 0 18px; border-radius: 12px; background: rgba(255, 255, 255, 0.05); margin-top: 10px; opacity: 0; }
+      .row .ic { width: 54px; height: 54px; border-radius: 11px; display: grid; place-items: center; font-weight: 800; font-size: 22px; color: #fff; flex: none; }
+      .row .what { flex: 1; min-width: 0; }
+      .row .what b { display: block; font-size: 29px; font-weight: 700; }
+      .row .what small { display: block; margin-top: 4px; font-size: 21px; color: rgba(255, 255, 255, 0.55); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+      .tag { padding: 9px 16px; border-radius: 8px; font-size: 20px; font-weight: 800; letter-spacing: 0.08em; text-transform: uppercase; }
+      .tag.work { background: #1e7f4f; } .tag.drift { background: var(--red); } .tag.meh { background: rgba(255, 255, 255, 0.16); }
+
+      /* The coach, talking */
+      .talking { display: flex; align-items: center; gap: 14px; height: 70px; padding: 0 22px 0 14px; border-radius: 16px; background: #101820; box-shadow: 0 18px 40px rgba(0, 0, 0, 0.4), inset 0 0 0 1px rgba(255, 255, 255, 0.1); }
+      .talking .lk { width: 42px; height: 42px; border-radius: 10px; display: grid; place-items: center; background: var(--yellow); }
+      .talking .who { font-family: var(--display); font-weight: 800; font-size: 26px; text-transform: uppercase; letter-spacing: 0.02em; white-space: nowrap; }
+      .talking .who small { display: block; margin-top: 2px; font-family: var(--body); font-weight: 600; font-size: 14px; letter-spacing: 0; text-transform: none; color: rgba(255, 255, 255, 0.6); }
+      .bars { display: flex; align-items: center; gap: 5px; height: 40px; margin-left: 10px; }
+      .bars i { width: 6px; height: 6px; border-radius: 3px; background: var(--yellow); }
+
+      /* Keys (chapter 5) */
+      .keys { display: flex; gap: 14px; }
+      .key { height: 120px; min-width: 120px; padding: 0 30px; border-radius: 20px; display: grid; place-items: center; font-size: 54px; font-weight: 600; color: #101820; background: linear-gradient(#ffffff, #e9eaee); box-shadow: 0 10px 0 #b9bcc4, 0 22px 40px rgba(0, 0, 0, 0.4); }
+      .key.wide { min-width: 260px; font-size: 40px; }
+
+      /* The doc you were in (chapter 4) */
+      .doc { width: 980px; height: 600px; border-radius: 14px; overflow: hidden; background: #f4f4f2; box-shadow: 0 0 0 1px rgba(0, 0, 0, 0.1), 0 40px 90px rgba(0, 0, 0, 0.5); color: #1d1d1f; }
+      .doc .bar { height: 40px; display: flex; align-items: center; gap: 9px; padding: 0 14px; background: #e6e6e3; font-size: 15px; font-weight: 600; color: #555; }
+      .doc .bar i { width: 13px; height: 13px; border-radius: 50%; }
+      .doc .bar span { margin: 0 auto; padding-right: 70px; }
+      .doc .side { position: absolute; left: 0; top: 40px; bottom: 0; width: 190px; padding: 18px 16px; background: #ecece9; display: flex; flex-direction: column; gap: 14px; }
+      .doc .side div { height: 82px; border-radius: 6px; background: #fff; box-shadow: 0 0 0 1px rgba(0, 0, 0, 0.08); }
+      .doc .side div.cur { box-shadow: 0 0 0 3px #0a7cff; }
+      .doc .slide { position: absolute; left: 230px; top: 78px; right: 40px; height: 430px; border-radius: 8px; background: #fff; box-shadow: 0 2px 10px rgba(0, 0, 0, 0.08); padding: 52px 56px; }
+      .doc .slide h2 { margin: 0 0 26px; font-size: 46px; font-weight: 800; letter-spacing: -0.01em; }
+      .doc .slide p { margin: 0 0 14px; height: 16px; border-radius: 8px; background: #e4e4e1; }
+      .doc .caret { display: inline-block; width: 3px; height: 44px; margin-left: 4px; vertical-align: -6px; background: #0a7cff; }
+      .back { padding: 12px 20px; border-radius: 12px; background: #1e7f4f; color: #fff; font-size: 24px; font-weight: 700; box-shadow: 0 20px 40px rgba(0, 0, 0, 0.35); white-space: nowrap; }
+
+      /* Opening and closing */
+      .logo { display: flex; align-items: center; gap: 30px; }
+      .logo img { width: 150px; height: 150px; border-radius: 34px; box-shadow: 0 24px 60px rgba(0, 0, 0, 0.45); }
+      .logo b { font-family: var(--display); font-weight: 900; font-size: 210px; line-height: 0.8; text-transform: uppercase; letter-spacing: 0.01em; }
+      .tagline { font-family: var(--display); font-weight: 800; font-size: 64px; text-transform: uppercase; letter-spacing: 0.02em; color: rgba(255, 255, 255, 0.92); }
+      .tagline span { display: inline-block; opacity: 0; margin-right: 18px; }
+      .tagline span.y { color: var(--yellow); }
+      .facts { display: flex; gap: 14px; justify-content: center; }
+      .facts span { padding: 12px 22px; border-radius: 999px; background: rgba(255, 255, 255, 0.1); box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.18); font-size: 26px; font-weight: 600; opacity: 0; }
+      .facts span.y { background: var(--yellow); color: var(--ink); box-shadow: none; }
+      .url { font-family: var(--body); font-weight: 700; font-size: 34px; color: #fff; letter-spacing: 0.01em; }
+
+      /* Subtitles */
+      #subs { position: absolute; left: 50%; bottom: 46px; transform: translateX(-50%); max-width: 1500px; padding: 12px 26px 14px; border-radius: 14px; background: rgba(8, 10, 14, 0.72); font-size: 33px; line-height: 1.32; font-weight: 600; text-align: center; color: #fff; opacity: 0; }
+      #subs.coach { color: var(--yellow); }
+      #subs.me { color: #9fd7ff; }
+      #fade { position: absolute; inset: 0; background: #000; opacity: 0; pointer-events: none; }
+    </style>
+  </head>
+  <body>
+    <div id="bg"></div>
+    <div id="grain"></div>
+    <div id="scenes"></div>
+    <div id="subs"></div>
+    <div id="fade"></div>
+    <script src="film.js"></script>
+  </body>
+</html>
