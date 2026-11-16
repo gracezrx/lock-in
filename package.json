@@ -7,6 +7,9 @@
   "main": "dist/main/index.js",
   "private": true,
   "license": "MIT",
+  "author": "Grace Zhong",
+  "homepage": "https://github.com/gracezrx/lock-in",
+  "bugs": "https://github.com/gracezrx/lock-in/issues",
   "repository": "github:gracezrx/lock-in",
   "scripts": {
     "build": "node build.mjs",

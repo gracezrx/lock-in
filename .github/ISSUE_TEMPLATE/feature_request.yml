@@ -1,0 +1,15 @@
+name: Idea
+description: Something Lock In should do.
+labels: [idea]
+body:
+  - type: textarea
+    id: moment
+    attributes:
+      label: What were you trying to do?
+      description: The moment Lock In got in your way, or didn't help when it could have.
+    validations:
+      required: true
+  - type: textarea
+    id: idea
+    attributes:
+      label: What would help?

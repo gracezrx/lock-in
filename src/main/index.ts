@@ -2375,6 +2375,7 @@ function telemetryTraits(): Record<string, string | number | boolean | null> {
 const PAGE_EVENTS = /^(onboarding_[a-z_]+|page_view|telemetry_choice|coach_preview|panel_opened)$/;
 
 function setupTelemetryIpc(): void {
+  handle('app:version', () => app.getVersion());
   handle('telemetry:track', (_e, name: string, props?: Record<string, string | number | boolean | null>) => {
     if (typeof name === 'string' && PAGE_EVENTS.test(name)) telemetry?.track(name, props && typeof props === 'object' ? props : undefined);
     return true;

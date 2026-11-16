@@ -1,0 +1,40 @@
+name: Bug report
+description: Something in Lock In doesn't work the way it should.
+labels: [bug]
+body:
+  - type: textarea
+    id: what
+    attributes:
+      label: What happened?
+      description: What you did, what you expected, and what happened instead.
+    validations:
+      required: true
+  - type: input
+    id: version
+    attributes:
+      label: Lock In version
+      description: In Settings, at the bottom of the page.
+      placeholder: "0.4.0"
+    validations:
+      required: true
+  - type: input
+    id: macos
+    attributes:
+      label: macOS version
+      placeholder: "macOS 15.1, Apple silicon"
+  - type: dropdown
+    id: where
+    attributes:
+      label: Where
+      multiple: true
+      options:
+        - Mac app
+        - Lock In Extended (Chrome extension)
+        - Phone page
+        - Setup
+  - type: textarea
+    id: log
+    attributes:
+      label: Activity log
+      description: The relevant lines from Settings → Activity log. Look them over first, they can include app and site names. Never paste API keys or calendar links.
+      render: text

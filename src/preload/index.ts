@@ -7,7 +7,7 @@ const INVOKE = new Set([
   'coach:choose', 'coach:reply', 'coach:talk', 'coach:preview', 'coach:dismissPreview', 'voice:test', 'mute', 'unmute',
   'setup:status', 'setup:promptAccessibility', 'setup:askMic', 'setup:browsers', 'setup:addExtension', 'setup:openUrl', 'setup:log',
   'data:export', 'data:delete',
-  'telemetry:track', 'telemetry:payload', 'telemetry:forget',
+  'telemetry:track', 'telemetry:payload', 'telemetry:forget', 'app:version',
   'action:run', 'todos:get', 'todos:refresh', 'todos:complete', 'todos:add', 'todos:remove', 'todos:roastTest',
   'routines:get', 'routines:save', 'routines:test', 'notify:test', 'sound:test',
   'quiz:apps', 'todos:sheetPreview', 'todos:pickSheetFile', 'todos:connectorScript', 'clipboard:write', 'todos:undo',

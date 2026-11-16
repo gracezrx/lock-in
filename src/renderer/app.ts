@@ -1717,6 +1717,8 @@ async function renderSettingsPage(): Promise<void> {
   page.append(await exportSection());
   page.append(await dataSection());
   page.append(usageDataSection(st, saveSt));
+  const version = await api.invoke<string>('app:version').catch(() => '');
+  if (version) page.append(h('p', { class: 'muted settings-version' }, `Lock In ${version} · `, h('a', { href: '#', onclick: (e: Event) => { e.preventDefault(); void api.invoke('setup:openUrl', 'https://github.com/gracezrx/lock-in/issues/new/choose'); } }, 'Report a problem')));
 
   const logBox = h('pre', { class: 'log', hidden: true });
   page.append(

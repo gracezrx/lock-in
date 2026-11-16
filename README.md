@@ -10,9 +10,13 @@ A desktop focus coach for macOS with a mouth on it. A one-minute setup asks what
 
 **[Download Lock In for Mac](https://github.com/gracezrx/lock-in/releases/latest/download/Lock-In-mac-arm64.zip)** (Apple silicon: M1 or later, macOS 13+), or see [all releases](https://github.com/gracezrx/lock-in/releases).
 
+Optional: **[Lock In Extended](https://github.com/gracezrx/lock-in/releases/latest/download/Lock-In-Extended.zip)**, the Chrome extension (Chrome, Arc, Brave, Edge). Setup walks you through adding it.
+
 1. Open the zip and drag **Lock In** into Applications.
 2. Open it. Lock In isn't signed with an Apple Developer ID yet, so the first time macOS says it can't check it for malware. Click **Done**, then open *System Settings → Privacy & Security*, scroll down and click **Open Anyway** next to Lock In. (Or run `xattr -cr "/Applications/Lock In.app"` once in Terminal.)
-3. Look for the padlock in your menu bar. Setup takes a minute.
+3. Setup takes a few minutes and walks you through everything, including the two optional API keys (Claude for live lines, ElevenLabs for the voice) and where to get them. Then look for the padlock in your menu bar.
+
+Free and open source. Everything Lock In knows about your day stays on your Mac; anonymous usage data is optional ([what's shared](#usage-data)).
 
 ## Build from source
 
@@ -395,7 +399,7 @@ npm run demo:walkthrough   # a screen-recording-style walkthrough to talk over o
 
 The demo is a scripted scene (`scripts/demo/stage.html`) that uses the real opening animation (`src/renderer/intro.ts`) and the real card from the extension, so it stays in step with the app. The opening animation plays once each time Lock In starts; click the logo to see it again.
 
-Packaging: `npm run dist` builds an unsigned `.dmg` with electron-builder. For other people to install it without warnings, sign and notarize it with an Apple Developer ID.
+Packaging: `npm run package:mac` builds the app zip (signed ad hoc). For other people to install it without warnings, it needs signing and notarizing with an Apple Developer ID.
 
 ## Known limits
 
@@ -414,6 +418,10 @@ Packaging: `npm run dist` builds an unsigned `.dmg` with electron-builder. For o
 - **Talking says "Voice is off"**: the message says why. Usually the ElevenLabs key is missing *ElevenAgents: Write*; edit the key at elevenlabs.io and paste it again. If the mic never opens, allow Lock In under *System Settings → Privacy and Security → Microphone*.
 - **No voice**: check the volume cap in *Coach*, quiet hours, and whether you're in a call. *Play a test line* checks the voice on its own.
 - **The coach flags real work**: use *Count as work* on the Lock In tab during a session, answer "this is work", or edit *Settings → Edit profile → Sometimes work*.
+
+## Contributing
+
+Bug reports, ideas and pull requests are welcome: see [CONTRIBUTING.md](CONTRIBUTING.md). Found a security problem? Please report it privately, as [SECURITY.md](SECURITY.md) describes.
 
 ## License
 

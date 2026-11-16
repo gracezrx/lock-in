@@ -958,3 +958,4 @@ html.jail .quiz-foot { background: rgba(23, 32, 35, 0.94); border-top-color: var
 .consent-pick { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; max-width: 520px; margin-top: 14px; }
 .consent-pick .seg b { font-size: 26px; }
 .quiz-next:disabled { opacity: 0.45; cursor: not-allowed; }
+.settings-version { margin: 28px 0 8px; font-size: 13px; } .settings-version a { color: inherit; }
