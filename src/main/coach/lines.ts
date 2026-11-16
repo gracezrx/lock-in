@@ -40,7 +40,7 @@ const LEVEL: Record<1 | 2 | 3 | 4, Bank> = {
     sassy: [
       'Why are you so locked out again? {min} minutes on {site}. {goal} is literally waiting.',
       'Babe. {site}? For {min} minutes? We said {goal}.',
-      "I'm not mad. I'm just watching you scroll {site} instead of doing {goal}.",
+      "I'm not mad. I'm just watching you scroll {site} when you said {goal}.",
       'Respectfully, what is going on? {min} minutes on {site}.',
       'Oh, so {site} is the plan now? Interesting. {work} disagrees.',
     ],
@@ -81,7 +81,7 @@ const LEVEL: Record<1 | 2 | 3 | 4, Bank> = {
   4: {
     sassy: [
       "That's it. {site} is blocked. I did it for us. Back to {work}.",
-      'Red card, bestie. {site} is gone until the session ends. Go do {goal}.',
+      'Red card, bestie. {site} is gone until the session ends. {goal}. Go.',
       "I blocked {site}. You're welcome. I'll be right here, judging, until you open {work}.",
     ],
     gentle: ["I've closed {site} for the rest of the session. {work} is waiting, and so am I.", "{site} is off for now. Let's do just five minutes of {goal}."],
