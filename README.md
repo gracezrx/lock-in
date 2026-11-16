@@ -2,9 +2,7 @@
 
 **You drift. It notices. It drags you back.**
 
-[![Lock In in 90 seconds: setup, the coach escalating from a corner card to a red card, talking back, a coach in your mom's voice, to-do roasts, routines, calendar, friends' bombs, and your phone](docs/tour.gif)](docs/tour.mp4)
-
-**▶ [Watch the 90-second tour with sound](docs/tour.mp4)**
+https://github.com/user-attachments/assets/b2a11f02-88f1-49ca-8834-1773b53e0a99
 
 A focus coach for your Mac, with a mouth on it. Lock In knows which app and site you're in. When you drift it nudges, then talks, then yells you back to work ("why are we so locked out again?"), and reopens exactly what you were doing. A distraction blocker that argues back, built for ADHD brains and anyone with a YouTube problem.
 
@@ -402,7 +400,7 @@ To see which features people use, the installed app sends anonymous usage data t
 npm test            # 225 tests: drift ladder, classifier, coach, extension bridge, to-do watchdog and providers, spreadsheets, routines, deadlines, voices, notifications, talking, calendar, export, crews and bombs, achievements, to-do history and backups
 npm run typecheck
 LOCKIN_SMOKE=1 npm start   # launches, exercises every window, a session, a typed and a voice conversation (against a stand-in server), the calendar and the export; prints SMOKE OK
-npm run demo:tour          # the 90-second feature tour, docs/tour.mp4, and its silent cut for this README, docs/tour.gif
+npm run demo:tour          # the 90-second feature tour, docs/tour.mp4, and a silent GIF cut, docs/tour.gif
 npm run demo               # re-records docs/demo.gif and docs/demo.mp4 (needs Playwright's Chromium and ffmpeg)
 npm run demo:bomb          # the vertical Lock In bomb clip, docs/bomb-demo.mp4 (try -- --them Maya --pronoun she)
 npm run demo:bomb:wide     # the same clip in landscape for X/Twitter, docs/bomb-demo-wide.mp4
