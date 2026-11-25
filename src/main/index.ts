@@ -501,7 +501,8 @@ function crewLocal(): LocalStatus {
     goal: c.shareGoal && sess ? sess.record.goal : undefined,
     distraction: c.shareDistraction ? where : undefined,
     sessionMin: sess ? Math.round(sess.elapsedSec(now) / 60) : undefined,
-    stats: myStats(now),
+    // How much you got done today, as counts, for the crew's Today board (titles only when shared).
+    stats: { ...myStats(now), ...(todos ? { doneToday: todos.doneToday().length, openTodos: todos.openRanked().length } : {}) },
     // Your list, and everything you finished today (ticked anywhere, or told the coach).
     todos: c.shareTodos && todos ? packTodos(todos.openRanked().map((t) => t.title), todos.doneToday().map((t) => t.title)) : undefined,
   };
@@ -3566,9 +3567,9 @@ async function newFeaturesSmoke(
 let smokeDeliver: ((from: { id: string; name: string }, msg: Record<string, unknown>) => void) | null = null;
 function smokeCrewRelay(): Relay {
   const friends = [
-    { id: 'sam', name: 'Sam', state: 'locked', goal: 'Problem set 4', sessionMin: 34, stats: { todayMin: 95, weekMin: 610, streak: 6, roastedWeek: 2, bombsThrownWeek: 4, achievements: 7 }, todos: { open: ['Problem set 4', 'Email the TA about the midterm', 'Book flights home'], done: ['Read chapter 3', 'Gym'], openCount: 3, doneCount: 2 } },
-    { id: 'lee', name: 'Lee', state: 'drifting', distraction: 'youtube.com', stats: { todayMin: 20, weekMin: 140, streak: 0, roastedWeek: 9, bombsThrownWeek: 1, achievements: 3 } },
-    { id: 'maya', name: 'Maya', state: 'free', stats: { todayMin: 60, weekMin: 380, streak: 3, roastedWeek: 4, bombsThrownWeek: 6, achievements: 5 } },
+    { id: 'sam', name: 'Sam', state: 'locked', goal: 'Problem set 4', sessionMin: 34, stats: { todayMin: 95, weekMin: 610, streak: 6, roastedWeek: 2, bombsThrownWeek: 4, achievements: 7, doneToday: 2, openTodos: 3 }, todos: { open: ['Problem set 4', 'Email the TA about the midterm', 'Book flights home'], done: ['Read chapter 3', 'Gym'], openCount: 3, doneCount: 2 } },
+    { id: 'lee', name: 'Lee', state: 'drifting', distraction: 'youtube.com', stats: { todayMin: 20, weekMin: 140, streak: 0, roastedWeek: 9, bombsThrownWeek: 1, achievements: 3, doneToday: 0, openTodos: 6 } },
+    { id: 'maya', name: 'Maya', state: 'free', stats: { todayMin: 60, weekMin: 380, streak: 3, roastedWeek: 4, bombsThrownWeek: 6, achievements: 5, doneToday: 5, openTodos: 1 } },
   ];
   let seq = 0;
   const relay: Relay = {
@@ -4414,6 +4415,9 @@ async function sheetShots(
   await js(`document.querySelectorAll('.crew-todos')[0]?.setAttribute('open', '')`);
   await wait(200);
   await shot(w, 'S5-friends');
+  await click('Today’s numbers');
+  await wait(600);
+  await shot(w, 'S6-today');
 }
 
 /** LOCKIN_SMOKE=1: exercise every window and a session, then exit. Used in CI/dev checks. */

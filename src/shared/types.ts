@@ -631,6 +631,9 @@ export interface CrewStats {
   roastedWeek: number;
   bombsThrownWeek: number;
   achievements: number;
+  /** To-dos finished today and still open (counts only; older versions don't send them). */
+  doneToday?: number;
+  openTodos?: number;
 }
 
 /** A friend's to-dos, shared with "Share my to-dos" on. */
@@ -656,6 +659,8 @@ export interface CrewMemberView {
   stats: CrewStats;
   /** Their to-dos, when they share them. */
   todos?: CrewTodos;
+  /** Minutes locked in today, the session going on now included. */
+  lockedToday: number;
   lastSeen: number;
   /** You can throw a bomb at them right now. */
   bombable: boolean;

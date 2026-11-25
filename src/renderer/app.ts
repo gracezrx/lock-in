@@ -3335,6 +3335,14 @@ let crewData: CrewPayload | null = null;
 const aim: { id: string; preset: string; custom: string } = { id: '', preset: '', custom: '' };
 let crewDirty = false;
 let inviteOpen = false;
+/** The Friends page's two views: the crew (statuses, bombs, feed) or today's numbers. */
+let friendsTab: 'crew' | 'today' = (() => {
+  try {
+    return localStorage.getItem('lockin.friendsTab') === 'today' ? 'today' : 'crew';
+  } catch {
+    return 'crew';
+  }
+})();
 
 const minutes = (m: number) => (m >= 60 ? `${Math.floor(m / 60)} h${m % 60 ? ` ${m % 60} min` : ''}` : `${m} min`);
 
@@ -3504,6 +3512,27 @@ function crewView(v: CrewView): Node[] {
     );
   }
 
+  const tabs = h(
+    'div',
+    { class: 'tri friends-tabs', role: 'tablist', 'aria-label': 'Friends views' },
+    ([['crew', 'Crew'], ['today', 'Today’s numbers']] as const).map(([id, label]) =>
+      h('button', { type: 'button', role: 'tab', 'aria-selected': String(friendsTab === id), 'aria-pressed': String(friendsTab === id), onclick: () => {
+        friendsTab = id;
+        try {
+          localStorage.setItem('lockin.friendsTab', id);
+        } catch {
+          /* only a convenience */
+        }
+        void renderFriends(crewData ?? undefined, true);
+      } }, label),
+    ),
+  );
+  out.push(tabs);
+  if (friendsTab === 'today') {
+    out.push(crewToday(v));
+    return out;
+  }
+
   // The crew, with a bomb for anyone not locked in.
   const list = h('ul', { class: 'crew-list' });
   for (const m of v.members) {
@@ -3580,6 +3609,50 @@ function crewView(v: CrewView): Node[] {
   const feed = h('ul', { class: 'crew-feed' }, v.feed.slice(0, 15).map((f) => h('li', { 'data-kind': f.kind }, h('span', { class: 'when' }, clockTime(f.at)), h('span', null, f.text))));
   out.push(h('div', { class: 'section', id: 'feed-sec' }, h('h2', null, 'Crew feed'), v.feed.length ? feed : h('p', { class: 'muted' }, 'Nothing yet. Bombs, lock-ins, finished to-dos and achievements show up here.')));
   return out;
+}
+
+/** Today, in numbers: how long everyone has locked in and how much they got done. */
+function crewToday(v: CrewView): HTMLElement {
+  const done = (m: CrewMemberView) => m.stats.doneToday;
+  const rows = [...v.members].sort((a, b) => b.lockedToday - a.lockedToday || (done(b) ?? -1) - (done(a) ?? -1) || a.name.localeCompare(b.name));
+  const most = Math.max(60, ...rows.map((m) => m.lockedToday));
+  const totalMin = rows.reduce((n, m) => n + m.lockedToday, 0);
+  const totalDone = rows.reduce((n, m) => n + (done(m) ?? 0), 0);
+  const hm = (m: number) => (m >= 60 ? h('span', null, h('b', null, String(Math.floor(m / 60))), h('small', null, 'h'), m % 60 ? [' ', h('b', null, String(m % 60)), h('small', null, 'm')] : null) : h('span', null, h('b', null, String(m)), h('small', null, 'm')));
+  const leader = rows[0] && rows[0].lockedToday > 0 ? rows[0].id : '';
+  const table = h(
+    'table',
+    { class: 'table today-board' },
+    h('thead', null, h('tr', null, h('th', null, ''), h('th', null, 'Who'), h('th', null, 'Locked in today'), h('th', { class: 'num' }, 'Done'), h('th', { class: 'num' }, 'To go'))),
+    h(
+      'tbody',
+      null,
+      rows.map((m, i) =>
+        h(
+          'tr',
+          { class: m.me ? 'me' : '', 'data-state': m.state },
+          h('td', { class: 'rank' }, m.id === leader ? '🏆' : String(i + 1)),
+          h('td', { class: 'tb-who' }, h('span', { class: 'dot', title: stateText(m) }), m.name, m.me ? h('span', { class: 'you' }, ' (you)') : null, m.state === 'locked' ? h('span', { class: 'live' }, 'locked in now') : null),
+          h('td', { class: 'mins' }, h('div', { class: 'bar' }, h('i', { style: `width:${Math.round((m.lockedToday / most) * 100)}%` })), hm(m.lockedToday)),
+          h('td', { class: 'num big' }, done(m) === undefined ? h('span', { class: 'muted', title: 'Their Lock In is an older version that doesn’t send this' }, '–') : String(done(m))),
+          h('td', { class: 'num' }, m.stats.openTodos === undefined ? h('span', { class: 'muted' }, '–') : String(m.stats.openTodos)),
+        ),
+      ),
+    ),
+  );
+  return h(
+    'div',
+    { class: 'section', id: 'today-sec' },
+    h(
+      'div',
+      { class: 'today-totals' },
+      h('div', null, h('span', { class: 'label' }, 'Crew locked in today'), h('span', { class: 'value' }, hm(totalMin))),
+      h('div', null, h('span', { class: 'label' }, 'Crew done today'), h('span', { class: 'value' }, h('b', null, String(totalDone)))),
+      h('div', null, h('span', { class: 'label' }, 'Locked in right now'), h('span', { class: 'value' }, h('b', null, String(rows.filter((m) => m.state === 'locked').length)), h('small', null, ` of ${rows.length}`))),
+    ),
+    table,
+    h('p', { class: 'muted today-note' }, 'Minutes count focused time in sessions, the one going on now included. Done counts everything finished today: ticked on a list or told to the coach. Just numbers; to-do titles show only for friends who share them.'),
+  );
 }
 
 /** A friend's shared to-dos: the count, and the list one click away. */

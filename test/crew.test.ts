@@ -319,3 +319,35 @@ test('friends who share their to-dos: the crew sees the list, and the feed says 
   // Grace doesn't share hers: nothing about her list goes out.
   assert.equal(sam.crew.view().members.find((m) => m.name === 'Grace')!.todos, undefined);
 });
+
+test("today's numbers: minutes locked in (the live session included), done counts, and a fresh start each day", async () => {
+  const { clock, people } = crewOf('Grace', 'Sam');
+  const [grace, sam] = people;
+  sam.local.state = 'locked';
+  sam.local.sessionMin = 20;
+  sam.local.stats = { ...STATS, todayMin: 30, doneToday: 4, openTodos: 2 };
+  await everyoneTicks(people);
+  const seen = () => grace.member(sam.crew.me);
+  assert.equal(seen().lockedToday, 50);
+  assert.equal(seen().stats.doneToday, 4);
+  assert.equal(seen().stats.openTodos, 2);
+  clock.now += 10 * 60_000;
+  assert.equal(seen().lockedToday, 60, 'the session keeps counting between updates');
+  // Finishing something is news (once it settles), even without sharing titles.
+  sam.local.stats = { ...sam.local.stats, doneToday: 5, openTodos: 1 };
+  sam.local.state = 'free';
+  sam.local.sessionMin = undefined;
+  sam.local.stats.todayMin = 60;
+  await everyoneTicks(people);
+  assert.equal(seen().stats.doneToday, 5);
+  assert.equal(seen().lockedToday, 60);
+  // Tomorrow, before Sam says anything: zeros, not yesterday's numbers.
+  clock.now = new Date('2026-10-27T09:00:00').getTime();
+  assert.equal(seen().lockedToday, 0);
+  assert.equal(seen().stats.doneToday, 0);
+  // Mine: today's minutes plus the session going on.
+  grace.local.state = 'locked';
+  grace.local.sessionMin = 15;
+  grace.local.stats = { ...STATS, todayMin: 40 };
+  assert.equal(grace.crew.view().members[0].lockedToday, 55);
+});

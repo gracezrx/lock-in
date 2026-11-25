@@ -174,6 +174,9 @@ function statsOf(x: unknown): CrewStats {
     roastedWeek: n(s.roastedWeek, 10_000),
     bombsThrownWeek: n(s.bombsThrownWeek, 100),
     achievements: n(s.achievements, 100),
+    // Counts only; missing from older versions, so left out rather than shown as 0.
+    ...(typeof s.doneToday === 'number' ? { doneToday: n(s.doneToday, 10_000) } : {}),
+    ...(typeof s.openTodos === 'number' ? { openTodos: n(s.openTodos, 10_000) } : {}),
   };
 }
 
@@ -475,7 +478,7 @@ export class Crew {
     const now = this.now();
     const local = this.d.local();
     // To-dos are news too, but they settle like drifting does (no flicker while you tick a few off).
-    const sig = JSON.stringify([local.state, local.goal ?? '', local.distraction ?? '', local.todos ? [local.todos.open, local.todos.done] : null]);
+    const sig = JSON.stringify([local.state, local.goal ?? '', local.distraction ?? '', local.todos ? [local.todos.open, local.todos.done] : null, local.stats.doneToday ?? null, local.stats.openTodos ?? null]);
     let due = now - this.lastPublish > HEARTBEAT_MS;
     if (sig !== this.lastSig) {
       // Locking in (or out of) a session is news right away; drifting and free settle first.
@@ -518,14 +521,22 @@ export class Crew {
       sessionMin: local.sessionMin,
       stats: local.stats,
       todos: local.todos,
+      lockedToday: local.stats.todayMin + (local.state === 'locked' || local.state === 'break' ? local.sessionMin ?? 0 : 0),
       lastSeen: now,
       bombable: false,
     };
     const order: CrewState[] = ['locked', 'break', 'drifting', 'free', 'meeting', 'away', 'offline'];
+    const today = dayOf(now);
     const others = Object.values(this.data.members).map<CrewMemberView>((m) => {
       const offline = now - m.lastSeen >= ONLINE_MS;
       const { statusAt: _, ...rest } = m;
-      return { ...rest, me: false, state: offline ? 'offline' : m.state, since: offline ? m.lastSeen : m.since, bombable: this.bombable(m, now) };
+      const sent = m.statusAt ?? m.lastSeen;
+      // Numbers from yesterday's last status don't count today.
+      const stale = dayOf(sent) !== today;
+      const stats = stale ? { ...m.stats, todayMin: 0, ...(m.stats.doneToday !== undefined ? { doneToday: 0 } : {}) } : m.stats;
+      // A session going on now: its minutes so far, ticking on between their updates.
+      const live = !stale && !offline && (m.state === 'locked' || m.state === 'break') && m.sessionMin !== undefined ? m.sessionMin + Math.max(0, Math.floor((now - sent) / 60_000)) : 0;
+      return { ...rest, stats, me: false, state: offline ? 'offline' : m.state, since: offline ? m.lastSeen : m.since, lockedToday: Math.min(1440, stats.todayMin + live), bombable: this.bombable(m, now) };
     });
     others.sort((a, b) => order.indexOf(a.state) - order.indexOf(b.state) || a.name.localeCompare(b.name));
     return {

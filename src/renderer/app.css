@@ -634,6 +634,33 @@ details.link-block[open] > summary { margin-bottom: 6px; }
 .crew-feed li[data-kind='bomb'] span:last-child { font-weight: 600; }
 .crew-feed li[data-kind='achievement'] span:last-child::before { content: '★ '; color: #8a5b00; }
 .crew-feed li[data-kind='done'] span:last-child::before { content: '✓ '; color: var(--turf-dark); font-weight: 700; }
+.friends-tabs { margin-top: 18px; }
+.friends-tabs button { padding: 7px 16px; font-size: 14px; font-weight: 600; }
+.today-totals { display: grid; grid-template-columns: repeat(auto-fit, minmax(170px, 1fr)); gap: 12px; margin-bottom: 18px; }
+.today-totals > div { display: grid; gap: 4px; padding: 14px 16px; border: 1.5px solid var(--line); border-radius: var(--r-md); background: var(--paper); }
+.today-totals .label { font-size: 12.5px; font-weight: 600; color: var(--ink-3); text-transform: uppercase; letter-spacing: 0.06em; }
+.today-totals .value { font-family: var(--display); font-size: 40px; line-height: 1; color: var(--ink); }
+.today-totals .value b { font-weight: 800; }
+.today-totals .value small { font-size: 22px; font-weight: 700; color: var(--ink-2); margin-left: 1px; }
+.today-board td { vertical-align: middle; }
+.today-board td.rank { width: 34px; text-align: center; font-weight: 700; color: var(--ink-3); }
+.today-board td.tb-who { font-weight: 600; white-space: nowrap; }
+.today-board td.tb-who .you { font-weight: 400; color: var(--ink-3); }
+.today-board td.tb-who .live { margin-left: 8px; padding: 2px 7px; border-radius: 999px; background: var(--turf); color: #fff; font-size: 11px; font-weight: 700; letter-spacing: 0.02em; vertical-align: 1px; }
+.today-board .dot { display: inline-block; width: 9px; height: 9px; border-radius: 50%; margin-right: 9px; background: var(--line); vertical-align: 1px; }
+.today-board tr[data-state='locked'] .dot, .today-board tr[data-state='break'] .dot { background: var(--turf); }
+.today-board tr[data-state='drifting'] .dot { background: var(--yellow); }
+.today-board tr[data-state='free'] .dot { background: var(--ink-3); }
+.today-board td.mins { width: 46%; }
+.today-board td.mins > span { font-family: var(--display); font-size: 24px; color: var(--ink); white-space: nowrap; }
+.today-board td.mins b { font-weight: 800; }
+.today-board td.mins small { font-size: 15px; font-weight: 700; color: var(--ink-2); }
+.today-board .bar { height: 8px; border-radius: 4px; background: var(--line-soft); overflow: hidden; margin-bottom: 6px; max-width: 360px; }
+.today-board .bar i { display: block; height: 100%; border-radius: 4px; background: var(--turf); min-width: 2px; }
+.today-board td.num { text-align: right; font-variant-numeric: tabular-nums; }
+.today-board td.num.big { font-family: var(--display); font-size: 28px; font-weight: 800; color: var(--ink); }
+.today-board tr.me td { background: var(--yellow-soft); }
+.today-note { margin-top: 12px; font-size: 13px; max-width: 70ch; }
 .crew-todos { margin-top: 4px; font-size: 13.5px; }
 .crew-todos summary { cursor: pointer; color: var(--ink-2); width: fit-content; }
 .crew-todos summary:hover { color: var(--ink); }
