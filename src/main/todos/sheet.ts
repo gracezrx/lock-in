@@ -2,13 +2,19 @@
 //  - Finds the task, done, due and priority columns from the headers and values.
 //  - A row counts as finished today when it was open on an earlier read and is now
 //    ticked (or, for lists without a done column, deleted).
+//  - Lock In can keep its own "Lock In" tab in the sheet (template.ts). To-dos added or
+//    ticked in Lock In are written into the sheet; while it can't be written (a shared
+//    Google link, a file open in Excel) they're kept in Lock In and written later.
 import { execFile } from 'node:child_process';
-import { readFileSync, statSync } from 'node:fs';
-import { extname } from 'node:path';
+import { randomUUID } from 'node:crypto';
+import { existsSync, readFileSync, renameSync, statSync, writeFileSync } from 'node:fs';
+import { basename, dirname, extname, join } from 'node:path';
 import { strFromU8, unzipSync } from 'fflate';
 import type { SheetPreview, SheetSettings, Task } from '../../shared/types';
 import { dayKey, localDate } from './day';
 import type { TodoProvider, TodoSnapshot } from './providers';
+import { TCOL, TEMPLATE_HEADERS, TEMPLATE_TAB, doneValueFor, placeCells, templateCells, type TemplateRow, type WCell } from './template';
+import { addTemplateTab, writeXlsx, type CellEdit } from './xlsxwrite';
 
 export type Cell = string | number | boolean | null;
 export type Table = Cell[][];
@@ -481,6 +487,23 @@ export interface TrackState {
   local?: Record<string, { title: string; at: number }>;
   /** Which tab and columns this was tracked against; a different table starts the count fresh. */
   sig?: string;
+  /** To-dos added (or ticked) in Lock In that aren't in the sheet yet. Written as soon as the sheet can be. */
+  pending?: Pending[];
+}
+
+export interface Pending {
+  id: string;
+  title: string;
+  at: number;
+  due?: string;
+  priority?: number;
+  project?: string;
+  /** Ticked off in Lock In (when). */
+  done?: number;
+  /** How many rows had this title when it was added, so a copy typed into the sheet is noticed. */
+  seen: number;
+  /** In the sheet now (kept until the day ends when done, for Done today). */
+  flushed?: boolean;
 }
 
 export function track(prev: TrackState | null, tasks: Task[], now: number, deletedCountsAsDone: boolean): { state: TrackState; doneToday: Task[] } {
@@ -699,15 +722,128 @@ async function completeInNumbers(path: string, tab: string, row: number, col: nu
 }
 
 // ---------------------------------------------------------------------------
+// Writing to Numbers (through the Numbers app)
+
+const JS_VAL = `function val_(v) { if (v && typeof v === 'object' && v.date) { const p = v.date.split('-'); return new Date(+p[0], +p[1] - 1, +p[2]); } return v; }`;
+
+/** The tabs of a Numbers file. */
+export async function numbersTabs(path: string): Promise<string[]> {
+  const out = await jxa(`${NUMBERS_OPEN(path)}
+    const names = doc.sheets.name();
+    ${NUMBERS_CLOSE(false)}
+    JSON.stringify(names);`);
+  return JSON.parse(out) as string[];
+}
+
+/** Adds Lock In's tab to a Numbers file. False when it was already there. */
+export async function numbersAddTab(path: string, rows: TemplateRow[]): Promise<boolean> {
+  const cells = rows.map((r) => templateCells(r, true).map((v, i) => (i === TCOL.done && v === '' ? false : v)));
+  const out = await jxa(`${NUMBERS_OPEN(path)}
+    ${JS_VAL}
+    const TAB = ${JSON.stringify(TEMPLATE_TAB)}, H = ${JSON.stringify(TEMPLATE_HEADERS)}, ROWS = ${JSON.stringify(cells)};
+    let result = 'exists';
+    if (!doc.sheets.name().some((n) => n.toLowerCase() === TAB.toLowerCase())) {
+      doc.sheets.push(app.Sheet({ name: TAB }));
+      const t = doc.sheets.byName(TAB).tables[0];
+      try { t.headerColumnCount = 0; } catch (e) {}
+      try { t.headerRowCount = 1; } catch (e) {}
+      try { t.footerRowCount = 0; } catch (e) {}
+      try { t.name = TAB; } catch (e) {}
+      t.columnCount = H.length;
+      t.rowCount = Math.max(ROWS.length + 1, 30);
+      H.forEach((h, c) => { t.rows[0].cells[c].value = h; });
+      try { t.ranges.byName('A2:A' + t.rowCount()).format = 'checkbox'; } catch (e) {}
+      ROWS.forEach((r, i) => r.forEach((v, c) => { if (v !== '' && v !== null) t.rows[i + 1].cells[c].value = val_(v); }));
+      [70, 300, 100, 80, 130, 220, 100].forEach((w, c) => { try { t.columns[c].width = w; } catch (e) {} });
+      result = 'created';
+    }
+    ${NUMBERS_CLOSE(true)}
+    result;`);
+  return out === 'created';
+}
+
+/** Sets cells and adds rows under the last task in one tab of a Numbers file. */
+export async function numbersWrite(path: string, tab: string, edits: CellEdit[], rows: Map<number, WCell>[], taskCol: number): Promise<void> {
+  const add = rows.map((m) => [...m.entries()]);
+  await jxa(`${NUMBERS_OPEN(path)}${NUMBERS_TABLE(tab)}
+    ${JS_VAL}
+    const E = ${JSON.stringify(edits)}, R = ${JSON.stringify(add)}, TC = ${taskCol};
+    E.forEach((e) => { t.rows[e.row].cells[e.col].value = val_(e.value); });
+    if (R.length) {
+      const col = t.columns[TC].cells.value();
+      let last = 0;
+      col.forEach((v, i) => { if (v !== null && v !== undefined && String(v).trim() !== '') last = i; });
+      const need = last + 1 + R.length;
+      if (t.rowCount() < need) t.rowCount = need;
+      R.forEach((cells, i) => cells.forEach(([c, v]) => { t.rows[last + 1 + i].cells[c].value = val_(v); }));
+    }
+    ${NUMBERS_CLOSE(true)}
+    'ok'`);
+}
+
+// ---------------------------------------------------------------------------
+// Writing to CSV
+
+function csvCell(v: WCell, d: string): string {
+  const t = v === null || v === undefined ? '' : typeof v === 'object' ? v.date : typeof v === 'boolean' ? (v ? 'TRUE' : 'FALSE') : String(v);
+  return t.includes(d) || /["\r\n]/.test(t) ? `"${t.replace(/"/g, '""')}"` : t;
+}
+
+export function toCsv(t: Table, d = ',', eol = '\n'): string {
+  return t.map((r) => r.map((v) => csvCell(v, d)).join(d)).join(eol) + eol;
+}
+
+/** The CSV with cells set and rows added under the last task. */
+export function writeCsv(text: string, delimiter: string | undefined, edits: CellEdit[], rows: Map<number, WCell>[], taskCol: number): string {
+  const d = delimiter ?? (text.split('\n')[0].split('\t').length > text.split('\n')[0].split(',').length ? '\t' : ',');
+  const eol = text.includes('\r\n') ? '\r\n' : '\n';
+  const t: WCell[][] = parseCsv(text, d);
+  while (t.length && t[t.length - 1].every((c) => s(c as Cell) === '')) t.pop();
+  const set = (r: number, c: number, v: WCell) => {
+    while (t.length <= r) t.push([]);
+    while (t[r].length <= c) t[r].push('');
+    t[r][c] = v;
+  };
+  for (const e of edits) set(e.row, e.col, e.value);
+  let last = 0;
+  t.forEach((r, i) => {
+    if (s((r[taskCol] ?? null) as Cell) !== '') last = i;
+  });
+  rows.forEach((cells, i) => {
+    for (const [c, v] of cells) set(last + 1 + i, c, v);
+  });
+  const width = Math.max(0, ...t.map((r) => r.length));
+  for (const r of t) while (r.length < width) r.push('');
+  return toCsv(t as Table, d, eol);
+}
+
+// ---------------------------------------------------------------------------
 // Private Google connector (Apps Script the user adds to their own sheet)
 
+export const CONNECTOR_VERSION = 2;
+
 export function appsScript(token: string): string {
-  return `// Lock In connector. It only answers requests that carry this secret.
+  return `// Lock In connector (version ${CONNECTOR_VERSION}). It only answers requests that carry this secret.
 const TOKEN = '${token}';
+const TEMPLATE = ${JSON.stringify(TEMPLATE_HEADERS)};
 
 function tab_(name) {
   const ss = SpreadsheetApp.getActiveSpreadsheet();
-  return name ? ss.getSheetByName(name) : ss.getSheets()[0];
+  if (!name) return ss.getSheets()[0];
+  const want = String(name).trim().toLowerCase();
+  return ss.getSheets().filter(function (s) { return s.getName().toLowerCase() === want; })[0] || null;
+}
+
+function tabs_() {
+  return SpreadsheetApp.getActiveSpreadsheet().getSheets().map(function (s) { return s.getName(); });
+}
+
+function value_(v) {
+  if (v && typeof v === 'object' && v.date) {
+    const p = String(v.date).split('-');
+    return new Date(+p[0], +p[1] - 1, +p[2]);
+  }
+  return v;
 }
 
 function out_(o) {
@@ -717,36 +853,67 @@ function out_(o) {
 function doGet(e) {
   if (!e || e.parameter.token !== TOKEN) return out_({ error: 'Wrong secret' });
   const sh = tab_(e.parameter.tab);
-  if (!sh) return out_({ error: 'No tab with that name' });
-  return out_({ values: sh.getDataRange().getValues() });
+  if (!sh) return out_({ error: 'No tab with that name', tabs: tabs_(), version: ${CONNECTOR_VERSION} });
+  return out_({ values: sh.getDataRange().getValues(), tabs: tabs_(), tab: sh.getName(), version: ${CONNECTOR_VERSION} });
+}
+
+// Lock In's own tab: one row per to-do, a checkbox to tick it off.
+function setup_(b) {
+  if (tab_(b.tab)) return { ok: true, created: false };
+  const sh = SpreadsheetApp.getActiveSpreadsheet().insertSheet(b.tab);
+  sh.setTabColor('#fecd00');
+  sh.getRange(1, 1, 1, TEMPLATE.length).setValues([TEMPLATE]).setFontWeight('bold').setBackground('#fecd00');
+  sh.setFrozenRows(1);
+  const last = sh.getMaxRows();
+  sh.getRange(2, 1, last - 1, 1).insertCheckboxes();
+  sh.getRange(2, 4, last - 1, 1).setDataValidation(SpreadsheetApp.newDataValidation().requireValueInList(['High', 'Medium', 'Low'], true).setAllowInvalid(true).build());
+  sh.getRange(2, 3, last - 1, 1).setNumberFormat('mmm d, yyyy');
+  sh.getRange(2, 7, last - 1, 1).setNumberFormat('mmm d, yyyy');
+  [60, 320, 110, 90, 140, 240, 110].forEach(function (w, i) { sh.setColumnWidth(i + 1, w); });
+  const done = SpreadsheetApp.newConditionalFormatRule().whenFormulaSatisfied('=$A2=TRUE').setFontColor('#8a9199').setStrikethrough(true).setRanges([sh.getRange(2, 1, last - 1, TEMPLATE.length)]).build();
+  sh.setConditionalFormatRules([done]);
+  const rows = (b.rows || []).map(function (r) { return r.map(value_); });
+  if (rows.length) sh.getRange(2, 1, rows.length, TEMPLATE.length).setValues(rows);
+  return { ok: true, created: true };
 }
 
 function doPost(e) {
   const b = JSON.parse(e.postData.contents);
   if (b.token !== TOKEN) return out_({ error: 'Wrong secret' });
-  const sh = tab_(b.tab);
-  if (!sh) return out_({ error: 'No tab with that name' });
-  if (b.action === 'complete') {
-    const values = sh.getDataRange().getValues();
-    let row = b.row;
-    if (!values[row] || String(values[row][b.taskCol]).trim() !== b.title) {
-      row = values.findIndex((r) => String(r[b.taskCol]).trim() === b.title);
+  const lock = LockService.getDocumentLock();
+  lock.waitLock(20000);
+  try {
+    if (b.action === 'setup') return out_(setup_(b));
+    const sh = tab_(b.tab);
+    if (!sh) return out_({ error: 'No tab with that name' });
+    if (b.action === 'complete') {
+      const values = sh.getDataRange().getValues();
+      let row = b.row;
+      if (!values[row] || String(values[row][b.taskCol]).trim() !== b.title) {
+        row = values.findIndex(function (r) { return String(r[b.taskCol]).trim() === b.title; });
+      }
+      if (row < 0) return out_({ error: 'Task not found' });
+      const cell = sh.getRange(row + 1, b.doneCol + 1);
+      const rule = cell.getDataValidation();
+      const isBox = rule && rule.getCriteriaType() === SpreadsheetApp.DataValidationCriteria.CHECKBOX;
+      cell.setValue(isBox || typeof values[row][b.doneCol] === 'boolean' ? true : (b.value || 'Done'));
+      return out_({ ok: true });
     }
-    if (row < 0) return out_({ error: 'Task not found' });
-    const cell = sh.getRange(row + 1, b.doneCol + 1);
-    const rule = cell.getDataValidation();
-    const isBox = rule && rule.getCriteriaType() === SpreadsheetApp.DataValidationCriteria.CHECKBOX;
-    cell.setValue(isBox || typeof values[row][b.doneCol] === 'boolean' ? true : 'Done');
-    return out_({ ok: true });
+    if (b.action === 'add') {
+      // Under the last task (not under empty checkboxes further down).
+      const values = sh.getDataRange().getValues();
+      let last = 0;
+      values.forEach(function (r, i) { if (String(r[b.taskCol] === undefined ? '' : r[b.taskCol]).trim() !== '') last = i; });
+      const rows = b.rows || [[[b.taskCol, b.title]]];
+      rows.forEach(function (cells, i) {
+        cells.forEach(function (c) { sh.getRange(last + 2 + i, c[0] + 1).setValue(value_(c[1])); });
+      });
+      return out_({ ok: true });
+    }
+    return out_({ error: 'Unknown action' });
+  } finally {
+    lock.releaseLock();
   }
-  if (b.action === 'add') {
-    const width = Math.max(sh.getLastColumn(), b.taskCol + 1);
-    const row = new Array(width).fill('');
-    row[b.taskCol] = b.title;
-    sh.appendRow(row);
-    return out_({ ok: true });
-  }
-  return out_({ error: 'Unknown action' });
 }
 `;
 }
@@ -768,6 +935,9 @@ export function sheetMode(c: SheetSettings): Mode {
   return 'xlsx';
 }
 
+/** Lock In can write into sheets of this kind (a plain Google link is read-only). */
+export const canWrite = (m: Mode) => m === 'script' || m === 'numbers' || m === 'xlsx' || m === 'csv';
+
 export interface SheetDeps {
   cfg: () => SheetSettings;
   http?: typeof fetch;
@@ -775,6 +945,10 @@ export interface SheetDeps {
   saveState: (s: TrackState) => void;
   /** Your names (full name, Mac account name), to find your tab and your rows. */
   me?: () => string[];
+  /** Your open Lock In to-dos, to fill a new Lock In tab with. */
+  seed?: () => TemplateRow[];
+  /** Called before Lock In first changes a file, so a copy can be kept. */
+  backup?: (path: string) => void;
 }
 
 /** What one read of the sheet produced. */
@@ -794,6 +968,25 @@ class NoSuchTab extends Error {
   }
 }
 
+/** The file is open somewhere that would overwrite Lock In's changes (Excel): try again later. */
+class Busy extends Error {}
+
+/** Excel leaves an owner file (~$Name.xlsx) next to a workbook while it has it open. */
+function openInExcel(path: string): boolean {
+  const dir = dirname(path);
+  const name = basename(path);
+  return existsSync(join(dir, `~$${name}`)) || (name.length > 2 && existsSync(join(dir, `~$${name.slice(2)}`)));
+}
+
+/** Replaces a file in one step, so nothing ever reads half of it. */
+function replaceFile(path: string, data: Uint8Array | string): void {
+  const tmp = join(dirname(path), `.${basename(path)}.lockin-${process.pid}`);
+  writeFileSync(tmp, data);
+  renameSync(tmp, path);
+}
+
+const OLD_CONNECTOR = 'Your Google connector is the older version, which can’t add a tab. Copy the script again, paste it over the old one in Apps Script, then choose Deploy, Manage deployments, the pencil, New version, Deploy.';
+
 export class SheetProvider implements TodoProvider {
   id = 'sheet' as const;
   private table: Table | null = null;
@@ -803,8 +996,22 @@ export class SheetProvider implements TodoProvider {
   private fileMtime = 0;
   private loaded: Loaded | null = null;
   private lastAnalysis: Analysis | null = null;
+  private tabReady = false;
+  private backedUp = false;
+  /** Why the last write didn't happen (the file is open in Excel…), for the to-dos page. */
+  waiting?: string;
 
   constructor(private d: SheetDeps) {}
+
+  /** The settings, with Lock In's own tab filled in. */
+  private get c(): SheetSettings {
+    const c = this.d.cfg();
+    return c.own && sheetMode(c) !== 'csv' ? { ...c, tab: TEMPLATE_TAB } : c;
+  }
+
+  private get mode(): Mode {
+    return sheetMode(this.d.cfg());
+  }
 
   /** The tab being read ('' when unknown). */
   get tabName(): string {
@@ -826,21 +1033,26 @@ export class SheetProvider implements TodoProvider {
 
   /** True when a tick in Lock In is written into the sheet itself. */
   get writesBack(): boolean {
-    const m = sheetMode(this.d.cfg());
-    return (m === 'script' || m === 'numbers') && this.map?.done !== null && this.map?.done !== undefined;
+    return canWrite(this.mode) && this.map?.done !== null && this.map?.done !== undefined;
+  }
+
+  /** Adding always works: written to the sheet when possible, otherwise kept in Lock In until it can be. */
+  get canAdd(): boolean {
+    return true;
+  }
+
+  /** New to-dos land in the sheet itself (not only in Lock In). */
+  get addsToSheet(): boolean {
+    return canWrite(this.mode);
   }
 
   private stateNow(now: number): TrackState {
     return this.d.loadState() ?? { day: dayKey(now), open: {}, done: {} };
   }
 
-  get canAdd(): boolean {
-    return sheetMode(this.d.cfg()) === 'script';
-  }
-
   /** Picks the tab from a whole workbook: the one you named, else the best guess. */
   private fromBook(book: Book): Loaded {
-    const want = this.d.cfg().tab.trim();
+    const want = this.c.tab.trim();
     if (want) {
       const name = matchTab(book.tabs, want);
       if (!name) throw new NoSuchTab(want, book.tabs);
@@ -853,7 +1065,7 @@ export class SheetProvider implements TodoProvider {
   private async readGoogle(url: string, withTabs: boolean): Promise<Loaded> {
     const id = googleSheetId(url);
     if (!id) throw new Error('That does not look like a Google Sheets link.');
-    const c = this.d.cfg();
+    const c = this.c;
     const gid = /[#?&]gid=(\d+)/.exec(url)?.[1];
     const privateErr = () => new Error('This sheet is private. Either share it as "Anyone with the link can view", or use the private connector below.');
     const linkedTab = !!gid && !c.tab.trim();
@@ -883,28 +1095,49 @@ export class SheetProvider implements TodoProvider {
     return { table: parseCsv(await res.text(), ','), tabs: book?.tabs ?? [], tab: c.tab.trim() };
   }
 
+  private async script(params: Record<string, string>): Promise<{ values?: Table; error?: string; tabs?: string[]; tab?: string; version?: number }> {
+    const c = this.c;
+    const u = new URL(c.url.trim());
+    u.searchParams.set('token', c.token);
+    for (const [k, v] of Object.entries(params)) if (v) u.searchParams.set(k, v);
+    const res = await this.http(u, { redirect: 'follow', signal: AbortSignal.timeout(15_000) });
+    const text = await res.text();
+    try {
+      return JSON.parse(text);
+    } catch {
+      throw new Error('The connector did not answer. Check it is deployed as a web app with access set to "Anyone".');
+    }
+  }
+
+  private async post(body: Record<string, unknown>, what: string): Promise<{ ok?: boolean; created?: boolean; error?: string }> {
+    const c = this.c;
+    const res = await this.http(c.url.trim(), {
+      method: 'POST',
+      redirect: 'follow',
+      headers: { 'Content-Type': 'text/plain' },
+      body: JSON.stringify({ token: c.token, tab: c.tab.trim(), ...body }),
+      signal: AbortSignal.timeout(20_000),
+    });
+    const j = (await res.json().catch(() => ({}))) as { ok?: boolean; created?: boolean; error?: string };
+    if (!j.ok) throw new Error(j.error === 'Unknown action' ? OLD_CONNECTOR : j.error ?? `The connector could not ${what}.`);
+    return j;
+  }
+
   async load(force = false, withTabs = false): Promise<Loaded> {
-    const c = this.d.cfg();
-    const mode = sheetMode(c);
+    const c = this.c;
+    const mode = this.mode;
     switch (mode) {
       case 'none':
         throw new Error(c.kind === 'google' ? 'Paste your Google Sheets link first.' : 'Choose your spreadsheet file first.');
       case 'link':
         return this.readGoogle(c.url, withTabs);
       case 'script': {
-        const u = new URL(c.url.trim());
-        u.searchParams.set('token', c.token);
-        if (c.tab.trim()) u.searchParams.set('tab', c.tab.trim());
-        const res = await this.http(u, { redirect: 'follow', signal: AbortSignal.timeout(15_000) });
-        const text = await res.text();
-        let j: { values?: Table; error?: string };
-        try {
-          j = JSON.parse(text);
-        } catch {
-          throw new Error('The connector did not answer. Check it is deployed as a web app with access set to "Anyone".');
+        const j = await this.script({ tab: c.tab.trim() });
+        if (j.error) {
+          if (j.error === 'No tab with that name' && j.tabs) throw new NoSuchTab(c.tab.trim(), j.tabs);
+          throw new Error(j.error === 'Wrong secret' ? 'The connector has a different secret. Copy the script from Lock In again.' : j.error);
         }
-        if (j.error) throw new Error(j.error === 'Wrong secret' ? 'The connector has a different secret. Copy the script from Lock In again.' : j.error);
-        return { table: j.values ?? [], tabs: [], tab: c.tab.trim() };
+        return { table: j.values ?? [], tabs: j.tabs ?? [], tab: j.tab ?? c.tab.trim() };
       }
       case 'csv':
       case 'xlsx': {
@@ -926,10 +1159,11 @@ export class SheetProvider implements TodoProvider {
     }
   }
 
-  /** Chosen columns win; null = detect; -1 = "None". */
+  /** Chosen columns win; null = detect; -1 = "None". Lock In's own tab is always read as the template. */
   mapping(t: Table): ColumnMap {
     const c = this.d.cfg();
     const auto = detectColumns(t);
+    if (c.own) return auto;
     const pick = (v: number | null | undefined, a: number | null) => (v === null || v === undefined ? a : v < 0 ? null : v);
     return {
       header: auto.header,
@@ -947,27 +1181,197 @@ export class SheetProvider implements TodoProvider {
     this.table = l.table;
     const map = this.mapping(l.table);
     this.map = map;
-    const c = this.d.cfg();
+    const c = this.c;
     const a = analyzeTable(l.table, map, { scope: c.scope, now, owner: c.owner, me: this.me });
     this.rows = a.tasks;
     this.lastAnalysis = a;
     return a;
   }
 
+  // ---- Lock In's own tab ------------------------------------------------------------
+
+  private seedRows(): TemplateRow[] {
+    return this.d.seed?.() ?? [];
+  }
+
+  /** Whether Lock In's tab is in the sheet already (without changing anything). */
+  private async hasOwnTab(): Promise<boolean> {
+    const c = this.c;
+    switch (this.mode) {
+      case 'xlsx':
+        return readXlsxBook(new Uint8Array(readFileSync(c.path))).tabs.some((t) => t.toLowerCase() === TEMPLATE_TAB.toLowerCase());
+      case 'numbers':
+        return (await numbersTabs(c.path)).some((t) => t.toLowerCase() === TEMPLATE_TAB.toLowerCase());
+      case 'script': {
+        const j = await this.script({ tab: TEMPLATE_TAB });
+        if (j.error === 'Wrong secret') throw new Error('The connector has a different secret. Copy the script from Lock In again.');
+        if (!j.error) return true;
+        if (j.error === 'No tab with that name' && !j.version) throw new Error(OLD_CONNECTOR);
+        return false;
+      }
+      case 'csv':
+        return existsSync(c.path) && readFileSync(c.path, 'utf8').trim() !== '';
+      case 'link':
+        throw new Error('To add a Lock In tab to a Google Sheet, Lock In needs the private connector (steps below, about 2 minutes). Or pick one of the tabs you have.');
+      default:
+        return false;
+    }
+  }
+
+  /** Adds Lock In's tab (with your open to-dos) when it isn't there yet. True when it was added. */
+  async ensureOwnTab(): Promise<boolean> {
+    if (!this.d.cfg().own || this.tabReady) return false;
+    if (await this.hasOwnTab()) {
+      this.tabReady = true;
+      return false;
+    }
+    const c = this.c;
+    const seed = this.seedRows();
+    let created = false;
+    switch (this.mode) {
+      case 'xlsx': {
+        if (openInExcel(c.path)) throw new Error(`Close ${basename(c.path)} in Excel, then Lock In can add its tab.`);
+        const out = addTemplateTab(new Uint8Array(readFileSync(c.path)), seed);
+        if (out.created) {
+          this.keepCopy(c.path);
+          replaceFile(c.path, out.buf);
+        }
+        created = out.created;
+        break;
+      }
+      case 'csv':
+        if (existsSync(c.path) && openInExcel(c.path)) throw new Error(`Close ${basename(c.path)} in Excel, then Lock In can set it up.`);
+        replaceFile(c.path, toCsv([[...TEMPLATE_HEADERS], ...seed.map((r) => templateCells(r).map((v) => (v && typeof v === 'object' ? v.date : v)) as Cell[])]));
+        created = true;
+        break;
+      case 'numbers':
+        created = await numbersAddTab(c.path, seed);
+        break;
+      case 'script':
+        created = !!(await this.post({ action: 'setup', tab: TEMPLATE_TAB, rows: seed.map((r) => templateCells(r, true).map((v, i) => (i === TCOL.done && v === '' ? false : v))) }, 'add its tab')).created;
+        break;
+    }
+    this.tabReady = true;
+    this.fileMtime = 0;
+    this.readAt = 0;
+    return created;
+  }
+
+  private keepCopy(path: string): void {
+    if (this.backedUp) return;
+    this.backedUp = true;
+    try {
+      this.d.backup?.(path);
+    } catch {
+      /* a copy is a nicety */
+    }
+  }
+
+  // ---- writing ----------------------------------------------------------------------
+
+  /** What a tick looks like in this sheet's done column. */
+  private doneValue(): Cell {
+    const map = this.map;
+    if (!map || map.done === null || !this.table) return 'Done';
+    if (this.mode === 'numbers' && this.d.cfg().own) return true;
+    return doneValueFor(this.table.slice(map.header + 1).map((r) => r[map.done!] ?? null));
+  }
+
+  /** The "Added" column, when the sheet has one (Lock In's tab does). */
+  private addedCol(): number | null {
+    const head = this.map && this.map.header >= 0 ? this.table?.[this.map.header] ?? [] : [];
+    const i = head.findIndex((h) => /^(added|date added|created)$/i.test(s(h)));
+    return i >= 0 ? i : null;
+  }
+
+  /** Writes cells and new rows into the sheet. Throws Busy when the file can't be written right now. */
+  private async write(edits: CellEdit[], rows: TemplateRow[]): Promise<void> {
+    const map = this.map;
+    if (!map || map.task === null) throw new Error('Could not find a column of tasks.');
+    const c = this.c;
+    const mode = this.mode;
+    const doneValue = this.doneValue();
+    const added = this.addedCol();
+    const cells = rows.map((r) => {
+      const m = placeCells(r, map, doneValue);
+      if (added !== null && r.added) m.set(added, { date: r.added });
+      return m;
+    });
+    switch (mode) {
+      case 'xlsx':
+      case 'csv': {
+        if (openInExcel(c.path)) throw new Busy(`${basename(c.path)} is open in Excel. Lock In writes to it once you close it.`);
+        this.keepCopy(c.path);
+        if (mode === 'xlsx') replaceFile(c.path, writeXlsx(new Uint8Array(readFileSync(c.path)), this.loaded?.tab ?? c.tab, edits, cells, map.task));
+        else replaceFile(c.path, writeCsv(readFileSync(c.path, 'utf8'), extname(c.path).toLowerCase() === '.tsv' ? '\t' : undefined, edits, cells, map.task));
+        this.fileMtime = 0;
+        return;
+      }
+      case 'numbers':
+        await numbersWrite(c.path, c.tab, edits, cells, map.task);
+        this.readAt = 0;
+        return;
+      case 'script':
+        for (const e of edits) {
+          const task = this.rows.find((r) => r.row === e.row);
+          if (task) await this.post({ action: 'complete', row: e.row, taskCol: map.task, doneCol: e.col, title: task.title, value: doneValue }, 'tick it off');
+        }
+        if (cells.length) await this.post({ action: 'add', taskCol: map.task, title: rows[0].title, rows: cells.map((m) => [...m.entries()]) }, 'add it');
+        return;
+      default:
+        throw new Busy('This sheet is read-only from Lock In.');
+    }
+  }
+
+  /** Writes what Lock In has been holding (new to-dos, ticks) into the sheet. True when something was written. */
+  private async flush(state: TrackState): Promise<boolean> {
+    if (!canWrite(this.mode) || !this.map || this.map.task === null) return false;
+    const pending = (state.pending ?? []).filter((p) => !p.flushed);
+    const ticks = this.map.done === null ? [] : this.rows.filter((r) => state.local?.[r.id] && !this.sheetDone(r));
+    if (!pending.length && !ticks.length) return false;
+    try {
+      await this.write(
+        ticks.map((r) => ({ row: r.row, col: this.map!.done!, value: this.doneValue() })),
+        pending.map((p) => ({ title: p.title, due: p.due, priority: p.priority, project: p.project, done: !!p.done, added: localDate(p.at) })),
+      );
+      for (const p of pending) p.flushed = true;
+      this.waiting = undefined;
+      return true;
+    } catch (e) {
+      // Kept in Lock In and tried again on the next read; the to-dos page says why.
+      this.waiting = (e as Error).message;
+      return false;
+    }
+  }
+
+  /** Done in the sheet itself (not just ticked in Lock In). */
+  private sheetDone(r: RowTask): boolean {
+    const map = this.map;
+    return !!map && map.done !== null && isDone(this.table?.[r.row]?.[map.done] ?? null);
+  }
+
   async fetch(now = Date.now(), force = false): Promise<TodoSnapshot> {
-    const l = await this.load(force);
-    const a = this.analyze(l, now);
-    const map = this.map!;
-    if (map.task === null) throw new Error('Could not find a column of tasks. Pick it on the To-dos page.');
-    const present = new Set(this.rows.map((r) => r.id));
-    // A different tab or table: start today's count fresh, keeping your ticks on rows that are still there.
-    const sig = `${l.tab}|${map.header}|${map.task}|${a.owner}`;
+    await this.ensureOwnTab();
+    let l = await this.load(force);
+    let a = this.analyze(l, now);
+    if (this.map!.task === null) throw new Error('Could not find a column of tasks. Pick it on the To-dos page.');
+    const sig = `${l.tab}|${this.map!.header}|${this.map!.task}|${a.owner}`;
     let prev = this.d.loadState();
+    // A different tab or table: start today's count fresh, keeping your ticks and new to-dos.
     if (prev && prev.sig !== sig) {
+      const present = new Set(this.rows.map((r) => r.id));
       const keep: TrackState['local'] = {};
       for (const [id, v] of Object.entries(prev.local ?? {})) if (present.has(id)) keep[id] = v;
-      prev = { day: dayKey(now), open: {}, done: {}, local: keep };
+      prev = { day: dayKey(now), open: {}, done: {}, local: keep, pending: prev.pending };
     }
+    // Anything held in Lock In goes into the sheet now, if it can; then read what the sheet says.
+    if (prev && (await this.flush(prev))) {
+      this.d.saveState(prev);
+      l = await this.load(true);
+      a = this.analyze(l, now);
+    }
+    const map = this.map!;
+    const present = new Set(this.rows.map((r) => r.id));
     const local = { ...(prev?.local ?? {}) };
     for (const r of this.rows) {
       if (!local[r.id]) continue;
@@ -978,10 +1382,22 @@ export class SheetProvider implements TodoProvider {
     const { state, doneToday } = track(prev, this.rows, now, map.done === null);
     state.local = local;
     state.sig = sig;
+
+    // New to-dos made in Lock In: shown until the sheet has them, kept on Done today once ticked.
+    const today = dayKey(now);
+    const count = (title: string) => this.rows.filter((r) => norm(r.title) === norm(title)).length;
+    const pending = (prev?.pending ?? []).filter((p) => {
+      if (!p.flushed && count(p.title) > p.seen) p.flushed = true; // someone typed it into the sheet
+      if (p.done && dayKey(p.done) !== today) return false;
+      return !p.flushed || !!p.done;
+    });
+    state.pending = pending;
     this.d.saveState(state);
+    const extraOpen = pending.filter((p) => !p.flushed && !p.done).map<Task>((p) => ({ id: p.id, title: p.title, due: p.due, priority: p.priority, project: p.project, completed: false }));
+    const extraDone = pending.filter((p) => p.done).map<Task>((p) => ({ id: p.id, title: p.title, completed: true, completedAt: p.done, localOnly: !p.flushed }));
     return {
-      open: this.rows.filter((r) => !r.completed).map(({ row: _r, ...task }) => task),
-      doneToday: doneToday.map((d) => (local[d.id] ? { ...d, localOnly: true } : d)),
+      open: [...this.rows.filter((r) => !r.completed).map(({ row: _r, ...task }) => task), ...extraOpen],
+      doneToday: [...doneToday.map((d) => (local[d.id] ? { ...d, localOnly: true } : d)), ...extraDone],
       fetchedAt: now,
     };
   }
@@ -989,6 +1405,13 @@ export class SheetProvider implements TodoProvider {
   /** Un-tick something that was ticked in Lock In only. */
   async undo(id: string): Promise<boolean> {
     const st = this.stateNow(Date.now());
+    const p = st.pending?.find((x) => x.id === id);
+    if (p) {
+      if (p.flushed) return false;
+      p.done = undefined;
+      this.d.saveState(st);
+      return true;
+    }
     if (!st.local?.[id]) return false;
     delete st.local[id];
     this.d.saveState(st);
@@ -996,62 +1419,79 @@ export class SheetProvider implements TodoProvider {
   }
 
   async complete(id: string): Promise<boolean> {
-    const c = this.d.cfg();
-    const mode = sheetMode(c);
-    const task = this.rows.find((r) => r.id === id);
-    const map = this.map;
-    if (!task || !map || map.task === null) return false;
-    if (!this.writesBack || map.done === null) {
-      const st = this.stateNow(Date.now());
-      st.local = { ...(st.local ?? {}), [id]: { title: task.title, at: Date.now() } };
+    const now = Date.now();
+    const st = this.stateNow(now);
+    const p = st.pending?.find((x) => x.id === id);
+    if (p) {
+      p.done = now;
       this.d.saveState(st);
       return true;
     }
-    if (mode === 'script') {
-      const res = await this.http(c.url.trim(), {
-        method: 'POST',
-        redirect: 'follow',
-        headers: { 'Content-Type': 'text/plain' },
-        body: JSON.stringify({ token: c.token, tab: c.tab.trim(), action: 'complete', row: task.row, taskCol: map.task, doneCol: map.done, title: task.title }),
-        signal: AbortSignal.timeout(15_000),
-      });
-      const j = (await res.json().catch(() => ({}))) as { ok?: boolean; error?: string };
-      if (!j.ok) throw new Error(j.error ?? 'The connector could not tick it off.');
-      return true;
+    // A file may have changed since the last read (rows inserted): find the row again first.
+    if (this.writesBack && (this.mode === 'xlsx' || this.mode === 'csv')) this.analyze(await this.load(true), now);
+    const task = this.rows.find((r) => r.id === id);
+    const map = this.map;
+    if (!task || !map || map.task === null) return false;
+    // Remembered right away; the next read writes it into the sheet (or keeps it, for a sheet that can't be written).
+    st.local = { ...(st.local ?? {}), [id]: { title: task.title, at: now } };
+    this.d.saveState(st);
+    if (this.writesBack) {
+      try {
+        await this.write([{ row: task.row, col: map.done!, value: this.doneValue() }], []);
+        this.waiting = undefined;
+      } catch (e) {
+        this.waiting = (e as Error).message;
+      }
     }
-    if (mode === 'numbers') {
-      const sample = this.table?.[task.row]?.[map.done];
-      await completeInNumbers(c.path, c.tab, task.row, map.done, typeof sample === 'boolean' || sample === null);
-      return true;
-    }
-    throw new Error('This sheet is read-only from Lock In. Tick it off in the sheet itself.');
+    return true;
   }
 
   async add(title: string): Promise<boolean> {
-    const c = this.d.cfg();
-    if (sheetMode(c) !== 'script') throw new Error('Add it in the sheet itself. Lock In can only add rows through the private connector.');
-    const map = this.map ?? { task: 0 };
-    const res = await this.http(c.url.trim(), {
-      method: 'POST',
-      redirect: 'follow',
-      headers: { 'Content-Type': 'text/plain' },
-      body: JSON.stringify({ token: c.token, tab: c.tab.trim(), action: 'add', taskCol: map.task ?? 0, title: title.trim() }),
-      signal: AbortSignal.timeout(15_000),
-    });
-    const j = (await res.json().catch(() => ({}))) as { ok?: boolean; error?: string };
-    if (!j.ok) throw new Error(j.error ?? 'The connector could not add it.');
+    const t = title.trim();
+    if (!t) return false;
+    const now = Date.now();
+    const st = this.stateNow(now);
+    const seen = this.rows.filter((r) => norm(r.title) === norm(t)).length;
+    st.pending = [...(st.pending ?? []), { id: `new:${randomUUID()}`, title: t, at: now, seen }];
+    this.d.saveState(st);
     return true;
+  }
+
+  /** Drops a to-do that was added in Lock In and isn't in the sheet yet. */
+  async remove(id: string): Promise<boolean> {
+    const st = this.stateNow(Date.now());
+    const before = st.pending?.length ?? 0;
+    st.pending = (st.pending ?? []).filter((p) => p.id !== id || p.flushed);
+    if (st.pending.length === before) return false;
+    this.d.saveState(st);
+    return true;
+  }
+
+  /** Open to-dos in the sheet, for when you stop using it (Lock In keeps them). */
+  openRows(): TemplateRow[] {
+    return this.rows.filter((r) => !r.completed).map((r) => ({ title: r.title, due: r.due, priority: r.priority, project: r.project }));
   }
 
   /** For the setup screen: what Lock In sees in the sheet right now. */
   async preview(): Promise<SheetPreview> {
-    const mode = sheetMode(this.d.cfg());
+    const mode = this.mode;
     const empty: SheetPreview = {
       ok: false, columns: [], map: { task: null, done: null, due: null, priority: null, assignee: null, project: null }, open: 0, done: 0, sample: [],
-      canComplete: false, canAdd: false, mode, tabs: [], tab: '', headerRow: null, skipped: 0, skippedSample: [], owners: [], owner: '',
+      canComplete: false, canAdd: false, mode, tabs: [], tab: '', headerRow: null, skipped: 0, skippedSample: [], owners: [], owner: '', writable: canWrite(mode),
     };
     let l: Loaded | null = null;
     try {
+      // Lock In's tab, not there yet: say what connecting will do.
+      if (this.d.cfg().own && !(await this.hasOwnTab())) {
+        let tabs: string[] = [];
+        try {
+          tabs = mode === 'xlsx' ? readXlsxBook(new Uint8Array(readFileSync(this.c.path))).tabs : mode === 'script' ? (await this.script({})).tabs ?? [] : [];
+        } catch {
+          /* only for the tab list */
+        }
+        const seed = this.seedRows();
+        return { ...empty, ok: true, canComplete: true, canAdd: true, tab: TEMPLATE_TAB, tabs, willCreate: true, seed: seed.length, sample: seed.slice(0, 5).map((r) => r.title), open: seed.length };
+      }
       l = await this.load(true, true);
       const a = this.analyze(l, Date.now());
       const map = this.map!;
@@ -1067,7 +1507,7 @@ export class SheetProvider implements TodoProvider {
         done: a.tasks.length - open.length,
         sample: ranked.slice(0, 5).map((r) => r.title),
         canComplete: this.writesBack,
-        canAdd: this.canAdd,
+        canAdd: this.addsToSheet,
         mode,
         tabs: l.tabs,
         tab: l.tab,
@@ -1077,6 +1517,7 @@ export class SheetProvider implements TodoProvider {
         skippedSample: junk.slice(0, 4).map((x) => x.title),
         owners: a.owners,
         owner: a.owner,
+        writable: canWrite(mode),
       };
     } catch (e) {
       return { ...empty, tabs: l?.tabs ?? (e instanceof NoSuchTab ? e.tabs : []), error: (e as Error).message };

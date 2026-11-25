@@ -89,6 +89,8 @@ export interface SheetSettings {
   owner: string | null;
   /** Which open rows count: all of them, or only those due today or earlier (plus undated). */
   scope: 'all' | 'due';
+  /** Lock In's own tab ("Lock In"), made from the template and kept in step with Lock In. */
+  own?: boolean;
 }
 
 export interface SheetPreview {
@@ -117,6 +119,11 @@ export interface SheetPreview {
   /** People in the "assigned to" column, and whose rows are being read ('' = everyone). */
   owners: string[];
   owner: string;
+  /** Lock In can write into this sheet (adds and ticks land in it). */
+  writable?: boolean;
+  /** Lock In's tab isn't there yet: connecting adds it, with this many of your to-dos. */
+  willCreate?: boolean;
+  seed?: number;
 }
 
 export interface Task {
@@ -608,6 +615,8 @@ export interface CrewSettings {
   shareGoal: boolean;
   /** Show friends which site or app you're drifting on. */
   shareDistraction: boolean;
+  /** Show friends your open to-dos and what you finished today. */
+  shareTodos?: boolean;
   /** Friends' bombs lock every distraction on this Mac for 5 minutes (sites blocked, apps hidden). */
   bombsLockout?: boolean;
   /** Friends' bombs take over your screen for 5 seconds (off: they arrive as a corner card). */
@@ -624,6 +633,16 @@ export interface CrewStats {
   achievements: number;
 }
 
+/** A friend's to-dos, shared with "Share my to-dos" on. */
+export interface CrewTodos {
+  /** Open to-dos, most urgent first (a few). */
+  open: string[];
+  /** Finished today, newest first (a few). */
+  done: string[];
+  openCount: number;
+  doneCount: number;
+}
+
 export interface CrewMemberView {
   id: string;
   name: string;
@@ -635,6 +654,8 @@ export interface CrewMemberView {
   distraction?: string;
   sessionMin?: number;
   stats: CrewStats;
+  /** Their to-dos, when they share them. */
+  todos?: CrewTodos;
   lastSeen: number;
   /** You can throw a bomb at them right now. */
   bombable: boolean;
@@ -643,7 +664,7 @@ export interface CrewMemberView {
 export interface CrewFeedItem {
   id: string;
   at: number;
-  kind: 'bomb' | 'bounce' | 'achievement' | 'session' | 'join' | 'leave';
+  kind: 'bomb' | 'bounce' | 'achievement' | 'session' | 'join' | 'leave' | 'done';
   text: string;
 }
 

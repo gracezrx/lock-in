@@ -189,7 +189,7 @@ test('private connector mode: reads with the secret and ticks rows off', async (
   assert.equal(p.canComplete, true);
   assert.equal(await p.complete(snap.open[0].id), true);
   const sent = JSON.parse(String(calls[1].init!.body));
-  assert.deepEqual(sent, { token: 's3cret', tab: 'Today', action: 'complete', row: 1, taskCol: 0, doneCol: 1, title: 'Deck' });
+  assert.deepEqual(sent, { token: 's3cret', tab: 'Today', action: 'complete', row: 1, taskCol: 0, doneCol: 1, title: 'Deck', value: true });
 });
 
 test('app usage: Spotlight output parsing', () => {

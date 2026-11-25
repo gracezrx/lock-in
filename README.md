@@ -11,10 +11,10 @@ A focus coach for your Mac, with a mouth on it. Lock In knows which app and site
 - **Escalates.** A corner card, then the coach's voice, then a full-screen yellow card, then a red one. Then it puts you back in your work.
 - **Lets you argue.** Hold Space or press ⌘⇧Space and talk back. It listens, answers, and ticks off what you say you got done.
 - **Sounds like anyone.** Pick a personality, from gentle friend to drill sergeant, or make the coach from a few voice notes of someone you can't ignore (with their OK), in their own language.
-- **Reads your to-dos.** Apple Reminders, Things, Todoist or a spreadsheet. It roasts you when you've been on for hours and finished nothing, and cheers when you finish.
+- **Reads your to-dos.** Its own list (kept in a spreadsheet tab too, if you like), Apple Reminders, Things or Todoist. It roasts you when you've been on for hours and finished nothing, and cheers when you finish.
 - **Runs your day.** Pomodoro and timed sessions, a morning kickoff, breaks, water, bedtime, goals it checks in on, and patterns it spots for you.
 - **Knows your calendar.** A heads-up before a meeting, and never a roast during one.
-- **Brings your friends.** Your crew sees who's drifting, and gets three bombs a day that lock every distraction on your Mac for five minutes.
+- **Brings your friends.** Your crew sees who's drifting (and, if you share them, your to-dos and what you finished today), and gets three bombs a day that lock every distraction on your Mac for five minutes.
 - **Finds you anywhere.** The menu bar, corner cards, full-screen cards, your phone and your browser.
 - **Stays private.** Everything it knows about your day stays on your Mac. Free and open source.
 
@@ -65,7 +65,7 @@ Then, inside the app:
    - A [Claude API key](https://console.anthropic.com/) gives live, specific coach lines, spoken back-and-forth, and labeling of sites it hasn't seen.
    - An [ElevenLabs API key](https://elevenlabs.io/) gives the coach a real voice (the drill sergeant actually shouts) and lets it hear your replies.
    - Without keys, the coach uses pre-written lines and the built-in Mac voice, and you answer with buttons or by typing.
-4. **Change your to-do list** any time on the *To-dos* page: Apple Reminders, Things 3, Todoist, a spreadsheet (Google Sheets, Excel, Numbers or CSV), or Lock In's own list. Reminders and Things ask macOS for permission the first time (System Settings, Privacy and Security, Automation). Todoist needs your API token from Todoist's Settings, Integrations, Developer.
+4. **Change your to-do list** any time on the *To-dos* page: Apple Reminders, Things 3, Todoist, or Lock In's own list, which can live in a spreadsheet tab too (Google Sheets, Excel, Numbers or CSV). Reminders and Things ask macOS for permission the first time (System Settings, Privacy and Security, Automation). Todoist needs your API token from Todoist's Settings, Integrations, Developer.
 5. **Try it:** *Coach → Try the coach* shows every level with a pretend YouTube drift. *To-dos → Roasts → Try it* shows the roasts. *Settings → Routines → Try it* fires any routine. Then lock in for real from the first tab.
 
 Keep Lock In running (it lives in the menu bar) so the to-do watchdog, deadline reminders and routines work all day.
@@ -143,9 +143,24 @@ Lock In counts the minutes you are actually at the computer (keyboard or mouse i
 
 No roasts during a focus session, a call, a mute, or the 10 minutes after a session. At most 6 a day. *Leave me alone for 30* snoozes them.
 
-## Spreadsheet to-do lists
+## Your list in a spreadsheet
 
-Pick *Spreadsheet* on the To-dos page, then paste a Google Sheets link or choose an Excel, Numbers or CSV file. Lock In finds the task, done, due-date, priority and assigned-to columns on its own (checkboxes, TRUE/FALSE, "Done", "Completed", "x" and ✓ all count as done) and shows what it found. Any column can be changed by hand.
+The Lock In list and a spreadsheet are one thing. On the To-dos page, pick *Lock In list*, then *Keep this list in a spreadsheet too*: paste a Google Sheets link, choose an Excel, Numbers or CSV file, or *Make a new one* (an Excel file that opens in Excel, Numbers or Google Sheets).
+
+**Lock In's own tab.** By default Lock In adds a tab called *Lock In* to your spreadsheet, with your open to-dos already in it, and leaves your other tabs alone. You see the tab before it's made. It has the same columns everywhere:
+
+| Done | Task | Due | Priority | Project | Notes | Added |
+| --- | --- | --- | --- | --- | --- | --- |
+| ☑ | Send the weekly update | Nov 24 | High | Work | | Nov 24 |
+| ☐ | Read chapter 3 | Nov 26 | Medium | Class | pages 40–62 | Nov 24 |
+
+Done is a checkbox (Google Sheets, Numbers) or a *Done* dropdown (Excel); finished rows turn grey and get struck through. Priority is a High/Medium/Low dropdown.
+
+**Both ways.** A to-do you add in Lock In (typed, from your phone, or said to the coach) is written into the sheet, and so is a tick. A row you add in the sheet shows up in Lock In within two minutes, and a tick there counts as done. When the sheet can't be written right now (the file is open in Excel, or it's a read-only Google link), Lock In keeps your new to-dos and ticks, marks them *not in the sheet yet*, and writes them as soon as it can. Before Lock In first changes a file, it keeps a copy in its own folder (the last ten).
+
+**Stop using it** brings the tab's open to-dos back into the Lock In list; the tab stays in your sheet as it is.
+
+**Or one of your tabs.** Pick any tab of yours instead and Lock In reads it as your list. Lock In finds the task, done, due-date, priority and assigned-to columns on its own (checkboxes, TRUE/FALSE, "Done", "Completed", "x" and ✓ all count as done) and shows what it found. Any column can be changed by hand. New to-dos go under your last task, and ticks copy what your sheet already uses ("x", "Done", a checkbox).
 
 It reads real-world trackers, not just tidy lists:
 
@@ -154,10 +169,10 @@ It reads real-world trackers, not just tidy lists:
 - **Your rows only.** In a shared sheet with an Assignee/Owner column, it keeps the rows assigned to you (matched to your Mac account name); switch to *Everyone* or anyone else in *Whose tasks count*.
 - **Not a task?** Point at a row on the To-dos page and click *Not a task* to hide it for good.
 
-- **Google Sheets, shared link:** share the sheet as "Anyone with the link can view". Lock In reads it every two minutes. Tick tasks off in the sheet.
-- **Google Sheets, private:** use the private connector. Lock In gives you a short Apps Script to paste into the sheet (Extensions, Apps Script), which you deploy as a web app. The sheet stays private, and you can tick tasks off and add new ones from Lock In.
-- **Excel or CSV file:** read from your Mac whenever the file changes. Tick tasks off in the file.
-- **Numbers file:** read through the Numbers app every 10 minutes. You can tick tasks off from Lock In.
+- **Google Sheets, private connector (to write to it):** Lock In gives you a short Apps Script to paste into the sheet (Extensions, Apps Script), which you deploy as a web app. The sheet stays private, and Lock In can add its tab, add rows and tick them off. Set it up before? Paste the new script over the old one and deploy a new version (Deploy, Manage deployments, the pencil, New version); the link stays the same.
+- **Google Sheets, shared link (read-only):** share the sheet as "Anyone with the link can view". Lock In reads it every two minutes; what you add or tick in Lock In stays in Lock In.
+- **Excel or CSV file:** read whenever the file changes, written directly. Close the file in Excel and Lock In catches up.
+- **Numbers file:** read and written through the Numbers app (every 10 minutes, or right away when you refresh).
 
 A row counts as done today when Lock In saw it open earlier and it is now ticked. If your sheet has no done column, deleting a row counts as finishing it.
 
@@ -194,9 +209,10 @@ It ships separately from the Mac app: download `Lock-In-Extended.zip` from the [
 The **Friends** tab. Start a crew and send friends the invite code (each of them needs Lock In on their Mac), or paste a code to join.
 
 - **See each other**: who's locked in (and on what, if they share it), who's drifting (and where, if they share it), who's free, in a meeting, away or offline.
+- **Share your to-dos** (*Crew settings*, off until you turn it on): your crew sees your open to-dos and everything you finished today, ticked anywhere or told to the coach, and the feed says "Sam finished “Problem set 4”." Everyone on the same page.
 - **Lock In bombs**: everyone gets **3 a day**. A bomb only lands on a friend who is at their computer and *not* locked in. Pick an insult (or write your own) and **every distraction on their Mac locks for 5 minutes**: distracting sites turn into a "Lock In bomb from you" page with a countdown (open tabs too), and distracting apps are hidden the moment they're opened. Then their screen goes red for **5 seconds**, no dismissing, while their coach reads it out, and they can lock in, bomb you back, or say "okay, okay". In a meeting, on a call, on mute, in quiet hours, or with *Bombs take over my screen* off, the red card is a corner card instead (the 5-minute lock still holds; *Bombs lock my distractions* turns that off). The menu bar shows 💣 and the time left; a second bomb adds to it. If they locked in before it arrived, it bounces and you get it back.
 - **Most roasted this week**: bombs that landed, yellow and red cards and to-do roasts since Monday. You don't want to top it.
-- **Crew feed**: bombs, lock-ins and achievements as they happen.
+- **Crew feed**: bombs, lock-ins, finished to-dos and achievements as they happen.
 
 How it travels: there's no Lock In server. A crew shares one topic on [ntfy](https://ntfy.sh) (ntfy.sh by default; any ntfy server works, set it under *Crew settings*), and every message is encrypted (AES-256-GCM) with a key derived from the invite code, so the relay only sees an unguessable topic and ciphertext. The rules are kept by the person they protect: your app counts the bombs each friend has landed on you today and ignores a fourth, and ignores bombs that arrive more than 2 minutes late.
 
@@ -380,7 +396,7 @@ test/                   engine, coach and bridge tests
 
 - Everything is stored on your Mac in `~/Library/Application Support/Lock In`. Your own voice is never stored. Recordings you give a coach made from someone are kept in its folder (`coaches/`) until you remove them; backups keep their transcripts, not the audio.
 - Nothing about which apps or sites you use is recorded outside a session (unless you share app usage, below), and Claude is only asked to label things during a session. Outside sessions Lock In only counts active minutes (for to-do roasts and routines) and, for Goals, when you were at the computer and when you stepped away (`rhythm.json`: times and totals only). Which cards you act on or ignore is kept as counts per kind of card (`attention.json`). *Delete all activity* deletes both.
-- To-do titles stay on your Mac unless you have a Claude key, in which case the top task's title is included when the coach writes a line. For big goals, the coach also sees each goal's title, reason and list, and (once a day) the names and projects you keep coming back to, with a few of the to-do, session and meeting titles they came from.
+- To-do titles stay on your Mac (and in the spreadsheet you connect, if you do) unless you have a Claude key, in which case the top task's title is included when the coach writes a line, or you turn on *Share my to-dos* in a crew, which sends a few open and finished titles to your crew, encrypted with your crew code. For big goals, the coach also sees each goal's title, reason and list, and (once a day) the names and projects you keep coming back to, with a few of the to-do, session and meeting titles they came from.
 - Only a small context (app name, site, page title, your goal) goes to Claude, with emails and numbers stripped. *Keep titles on this Mac* sends the site name only.
 - Incognito windows, password managers and banking sites are logged as "private" with no details.
 - The extension talks to the app over `127.0.0.1` and the app accepts only browser-extension connections, not web pages. On its own, Lock In Extended keeps everything in Chrome's local storage; see [its privacy policy](docs/extension-privacy.md).

@@ -401,6 +401,48 @@ html, body { height: 100%; background: var(--chalk); }
 .connector { padding: 16px 18px; border-radius: var(--r-md); border: 1.5px dashed var(--line); background: var(--paper); }
 .connector h3 { font-size: 15px; margin-bottom: 8px; }
 .connector ol { margin: 0; padding-left: 20px; display: grid; gap: 8px; font-size: 14px; color: var(--ink-2); }
+.connector > .muted { margin-top: 10px; font-size: 13px; }
+.tab-row select { padding: 7px 8px; border: 1.5px solid var(--line); border-radius: var(--r-sm); background: var(--paper); font-size: 13.5px; color: var(--ink); max-width: 360px; }
+.sheet-go { display: flex; flex-wrap: wrap; align-items: center; gap: 10px 14px; }
+.sheet-go .sheet-error { padding: 8px 12px; }
+
+/* The Lock In list, kept in a spreadsheet too */
+.list-sheet { margin-top: 18px; }
+.sheet-invite { padding: 18px 20px; border: 1.5px solid var(--line); border-radius: var(--r-md); background: var(--paper); display: grid; gap: 12px; justify-items: start; }
+.sheet-invite h3 { font-size: 17px; }
+.sheet-invite > .muted { font-size: 14px; max-width: 62ch; margin-top: -4px; }
+.sheet-invite-body { width: 100%; }
+.sheet-invite-body:empty { display: none; }
+.sheet-invite-body .sheet-setup { margin-top: 0; }
+.sheet-linked { display: grid; grid-template-columns: auto 1fr auto; gap: 14px; align-items: center; padding: 14px 16px; border: 1.5px solid var(--turf); border-radius: var(--r-md); background: var(--turf-soft); }
+.sheet-ico { width: 40px; height: 40px; border-radius: 9px; display: grid; place-items: center; background: var(--turf); color: #fff; font-size: 22px; line-height: 1; }
+.sheet-linked-text { display: grid; gap: 2px; min-width: 0; }
+.sheet-linked-text b { overflow-wrap: anywhere; }
+.sheet-linked-text .muted { font-size: 13px; }
+.sheet-linked-act { display: flex; gap: 8px; flex-wrap: wrap; justify-content: flex-end; }
+.sheet-adjust { margin-top: 10px; }
+.sheet-adjust summary { font-size: 14px; font-weight: 600; color: var(--ink-2); }
+@media (max-width: 640px) { .sheet-linked { grid-template-columns: auto 1fr; } .sheet-linked-act { grid-column: 1 / -1; justify-content: flex-start; } }
+
+/* The template, drawn as a little spreadsheet */
+.tpl { margin: 0; width: 100%; max-width: 680px; border: 1px solid var(--line); border-radius: var(--r-sm); overflow: hidden; background: var(--paper); }
+.tpl-scroll { overflow-x: auto; }
+.tpl table { border-collapse: collapse; width: 100%; min-width: 560px; font-size: 12.5px; font-variant-numeric: tabular-nums; }
+.tpl th, .tpl td { border: 1px solid var(--line-soft); padding: 5px 8px; text-align: left; white-space: nowrap; height: 26px; }
+.tpl thead th { background: var(--chalk); color: var(--ink-3); font-weight: 500; text-align: center; font-size: 11px; padding: 3px 8px; height: auto; }
+.tpl th.rn { width: 28px; background: var(--chalk); color: var(--ink-3); font-weight: 500; text-align: center; font-size: 11px; }
+.tpl tr.hd td { background: var(--yellow); font-weight: 700; color: var(--ink); }
+.tpl td.tpl-task { min-width: 170px; color: var(--ink); white-space: normal; }
+.tpl[hidden] { display: none; }
+.tpl td.notes { color: var(--ink-3); }
+.tpl td { color: var(--ink-2); }
+.tpl td.box { text-align: center; width: 46px; }
+.tpl .cb { display: inline-block; width: 13px; height: 13px; border: 1.5px solid var(--ink-3); border-radius: 3px; vertical-align: -2px; }
+.tpl .cb.on { background: var(--turf); border-color: var(--turf); box-shadow: inset 0 0 0 2px var(--paper); }
+.tpl tr.done td:not(.box) { color: var(--ink-3); text-decoration: line-through; }
+.tpl-tabs { display: flex; gap: 2px; padding: 0 8px; border-top: 1px solid var(--line-soft); background: var(--chalk); font-size: 12px; }
+.tpl-tabs span { padding: 5px 12px; color: var(--ink-3); }
+.tpl-tabs span.on { background: var(--paper); color: var(--ink); font-weight: 700; border-bottom: 2.5px solid var(--yellow); }
 
 .tasks li.ticking .task-title { text-decoration: line-through; color: var(--ink-3); }
 .tasks li.ticking { opacity: 0.6; transition: opacity 200ms; }
@@ -591,6 +633,18 @@ details.link-block[open] > summary { margin-bottom: 6px; }
 .crew-feed .when { flex: none; width: 64px; color: var(--ink-3); font-variant-numeric: tabular-nums; }
 .crew-feed li[data-kind='bomb'] span:last-child { font-weight: 600; }
 .crew-feed li[data-kind='achievement'] span:last-child::before { content: '★ '; color: #8a5b00; }
+.crew-feed li[data-kind='done'] span:last-child::before { content: '✓ '; color: var(--turf-dark); font-weight: 700; }
+.crew-todos { margin-top: 4px; font-size: 13.5px; }
+.crew-todos summary { cursor: pointer; color: var(--ink-2); width: fit-content; }
+.crew-todos summary:hover { color: var(--ink); }
+.crew-todos ul { list-style: none; margin: 6px 0 2px; padding: 0; display: grid; gap: 3px; }
+.crew-todos li { position: relative; padding-left: 20px; line-height: 1.35; }
+.crew-todos li::before { position: absolute; left: 0; top: 0; width: 14px; text-align: center; }
+.crew-todos ul.open li::before { content: '○'; color: var(--ink-3); }
+.crew-todos ul.done li { color: var(--ink-3); text-decoration: line-through; }
+.crew-todos ul.done li::before { content: '✓'; color: var(--turf-dark); font-weight: 700; text-decoration: none; }
+.crew-todos li.more { color: var(--ink-3); font-style: italic; text-decoration: none; }
+.crew-todos li.more::before { content: ''; }
 
 .badges { list-style: none; display: grid; grid-template-columns: repeat(auto-fill, minmax(168px, 1fr)); gap: 10px; margin: 12px 0 0; padding: 0; }
 .badge { display: flex; flex-direction: column; gap: 3px; padding: 12px; border: 1.5px dashed var(--line); border-radius: var(--r-md); color: var(--ink-3); }

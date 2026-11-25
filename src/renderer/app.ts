@@ -2745,6 +2745,7 @@ async function renderTodos(): Promise<void> {
           h('span', { class: 'task-title' }, t.title),
           due ? h('span', { class: `due${due.late ? ' late' : ''}` }, due.text) : null,
           (t.priority ?? 0) >= 3 ? h('span', { class: 'pill distraction' }, 'urgent') : null,
+          t.id.startsWith('new:') ? h('span', { class: 'due', title: 'Kept in Lock In until it can be written into your sheet' }, 'not in the sheet yet') : null,
         ),
         h(
           'div',
@@ -2752,7 +2753,7 @@ async function renderTodos(): Promise<void> {
           t.due
             ? h('button', { class: 'icon-btn', type: 'button', title: 'Make it a deadline: reminders before it is due, pinned on the day', 'aria-label': `Make "${t.title}" a deadline`, onclick: async (e: Event) => { (e.currentTarget as HTMLButtonElement).textContent = 'Pinned'; await api.invoke('deadlines:fromTask', t.id); } }, icon('<path d="M9 4h6l-1 5 3 3H7l3-3z"/><path d="M12 12v8"/>'))
             : null,
-          s.provider === 'builtin'
+          s.provider === 'builtin' || t.id.startsWith('new:')
             ? h('button', { class: 'icon-btn del', type: 'button', title: 'Delete', 'aria-label': `Delete "${t.title}"`, onclick: async () => { await api.invoke('todos:remove', t.id); void renderTodos(); } }, icon('<path d="M5 7h14M10 7V5h4v2M7 7l1 12h8l1-12"/>'))
             : h('button', { class: 'icon-btn', type: 'button', title: 'Hide this row from Lock In', 'aria-label': `"${t.title}" is not a task`, onclick: async () => { await api.invoke('todos:hide', t.id); void renderTodos(); } }, 'Not a task'),
         ),
@@ -2787,7 +2788,7 @@ async function renderTodos(): Promise<void> {
           ? h('p', { class: 'muted', style: 'margin-top:10px' }, `${s.hidden} ${s.hidden === 1 ? 'row' : 'rows'} hidden as not tasks. `, h('button', { class: 'link-btn', type: 'button', onclick: async () => { await api.invoke('todos:unhide'); void renderTodos(); } }, 'Show them again'))
           : null,
         s.tickNote || !s.canAdd
-          ? h('p', { class: 'muted', style: 'margin-top:10px' }, [s.tickNote, s.canAdd ? '' : 'Add new tasks in your list itself; Lock In checks it every two minutes.'].filter(Boolean).join(' '))
+          ? h('p', { class: 'muted sync-note', style: 'margin-top:10px' }, [s.tickNote, s.canAdd ? '' : 'Add new tasks in your list itself; Lock In checks it every two minutes.'].filter(Boolean).join(' '))
           : null,
       ),
     );
@@ -2819,11 +2820,16 @@ async function renderTodos(): Promise<void> {
   deadlinesBox = h('div', { class: 'section', id: 'deadlines-sec' });
   page.append(await weekSection(), deadlinesBox, h('div', { class: 'section list-settings' }, h('h2', null, 'Your list'), h('p', { class: 'sub' }, 'Where your to-dos come from, and how Lock In nudges you about them.')));
 
+  // The Lock In list and a spreadsheet are one choice: the list, kept in a sheet too if you like.
+  const lockInList = st.todo.provider === 'builtin' || st.todo.provider === 'sheet';
   const prov = h('div', { class: 'choices' });
   for (const p of TODO_PROVIDERS) {
-    prov.append(h('button', { class: 'choice', type: 'button', 'aria-pressed': String(st.todo.provider === p.id), onclick: async () => { await saveTodo({ provider: p.id }); await api.invoke('todos:refresh'); void renderTodos(); } }, h('b', null, p.label), h('small', null, p.help)));
+    if (p.id === 'sheet') continue;
+    const on = p.id === 'builtin' ? lockInList : st.todo.provider === p.id;
+    prov.append(h('button', { class: 'choice', type: 'button', 'aria-pressed': String(on), onclick: async () => { if (on) return; await saveTodo({ provider: p.id }); await api.invoke('todos:refresh'); void renderTodos(); } }, h('b', null, p.label), h('small', null, p.help)));
   }
   const conn = h('div', { class: 'section sub-section' }, h('h3', null, 'Where your to-dos live'), prov);
+  if (lockInList) conn.append(listSheetSection(st));
   const textField = (label: string, help: string, key: 'remindersList' | 'thingsList' | 'todoistFilter', ph: string) => {
     const i = h('input', { type: 'text', value: st.todo[key], placeholder: ph });
     i.addEventListener('change', async () => { await saveTodo({ [key]: i.value.trim() }); await api.invoke('todos:refresh'); void renderTodos(); });
@@ -2835,19 +2841,6 @@ async function renderTodos(): Promise<void> {
     conn.append(h('div', { class: 'fields' }, textField('List', 'Leave blank for every list.', 'remindersList', 'All lists'), field('Which reminders count', null, scope)));
   }
   if (st.todo.provider === 'things') conn.append(h('div', { class: 'fields' }, textField('Things list', 'Usually Today.', 'thingsList', 'Today')));
-  if (st.todo.provider === 'sheet') {
-    let timer: ReturnType<typeof setTimeout> | null = null;
-    conn.append(
-      sheetSetup(st.todo.sheet, (c) => {
-        st.todo.sheet = c;
-        if (timer) clearTimeout(timer);
-        timer = setTimeout(async () => {
-          await saveTodo({ sheet: c });
-          await api.invoke('todos:refresh');
-        }, 400);
-      }, false),
-    );
-  }
   if (st.todo.provider === 'todoist') {
     const tok = h('input', { type: 'password', placeholder: state?.keys.todoist ? 'Saved. Paste a new token to replace it.' : 'Paste your API token', autocomplete: 'off' });
     const note = h('span', { class: 'saved' });
@@ -2919,19 +2912,68 @@ function describeMap(pv: SheetPreview): string {
   return `Reading ${parts.join(', ')}.`;
 }
 
+/** What the Lock In tab looks like: a little spreadsheet, with your to-dos in it when there are some. */
+function templatePreview(titles: string[] = []): HTMLElement {
+  const day = (plus: number) => new Date(Date.now() + plus * 86_400_000).toLocaleDateString(undefined, { month: 'short', day: 'numeric' });
+  const examples: [boolean, string, string, string, string, string][] = [
+    [true, 'Send the weekly update', day(0), 'High', 'Work', ''],
+    [false, 'Read chapter 3', day(2), 'Medium', 'Class', 'pages 40–62'],
+    [false, 'Book the dentist', '', 'Low', 'Life', ''],
+  ];
+  const rows = titles.length ? titles.slice(0, 4).map((t): [boolean, string, string, string, string, string] => [false, t, '', '', '', '']) : examples;
+  const head = ['Done', 'Task', 'Due', 'Priority', 'Project', 'Notes', 'Added'];
+  return h(
+    'figure',
+    { class: 'tpl', 'aria-label': 'What the Lock In tab looks like' },
+    h(
+      'div',
+      { class: 'tpl-scroll' },
+      h(
+        'table',
+        null,
+        h('thead', null, h('tr', null, h('th', { class: 'rn' }), head.map((_, i) => h('th', { class: 'col' }, String.fromCharCode(65 + i))))),
+        h(
+          'tbody',
+          null,
+          h('tr', { class: 'hd' }, h('th', { class: 'rn' }, '1'), head.map((x) => h('td', null, x))),
+          rows.map(([done, task, due, prio, proj, notes], i) =>
+            h(
+              'tr',
+              { class: done ? 'done' : '' },
+              h('th', { class: 'rn' }, String(i + 2)),
+              h('td', { class: 'box' }, h('span', { class: `cb${done ? ' on' : ''}`, 'aria-label': done ? 'done' : 'not done' })),
+              h('td', { class: 'tpl-task' }, task),
+              h('td', null, due),
+              h('td', null, prio),
+              h('td', null, proj),
+              h('td', { class: 'notes' }, notes),
+              h('td', null, day(0)),
+            ),
+          ),
+        ),
+      ),
+    ),
+    h('div', { class: 'tpl-tabs' }, h('span', null, 'Sheet1'), h('span', { class: 'on' }, 'Lock In')),
+  );
+}
+
 /**
  * Paste a Google Sheets link or pick a file, see what Lock In found, fix the columns.
- * `compact` (setup) hides the column pickers and the row filter.
+ * `compact` (setup) hides the column pickers and the row filter. With `connect`, nothing is saved
+ * until you press the button, which adds Lock In's tab when that's the choice.
  */
-function sheetSetup(initial: SheetSettings, onChange: (c: SheetSettings) => void, compact: boolean): HTMLElement {
+function sheetSetup(initial: SheetSettings, onChange: (c: SheetSettings) => void, compact: boolean, opts: { connect?: () => void } = {}): HTMLElement {
   let c: SheetSettings = { ...initial };
   const box = h('div', { class: 'sheet-setup' });
   const status = h('div', { class: 'sheet-status', 'aria-live': 'polite' });
   let lastPreview: SheetPreview | null = null;
   let seq = 0;
+  let connecting = false;
+  let connectError = '';
 
   const set = (patch: Partial<SheetSettings>, recheck = true) => {
     c = { ...c, ...patch };
+    connectError = '';
     onChange(c);
     if (recheck) void check();
     else draw();
@@ -2957,7 +2999,7 @@ function sheetSetup(initial: SheetSettings, onChange: (c: SheetSettings) => void
     return h(
       'div',
       { class: 'connector' },
-      h('h3', null, 'Keep the sheet private and tick tasks off from Lock In'),
+      h('h3', null, c.own ? 'Let Lock In add its tab and write to your Google Sheet' : 'Keep the sheet private and let Lock In write to it'),
       h(
         'ol',
         null,
@@ -2966,11 +3008,31 @@ function sheetSetup(initial: SheetSettings, onChange: (c: SheetSettings) => void
           const code = await api.invoke<string>('todos:connectorScript');
           await api.invoke('clipboard:write', code);
           out.textContent = 'Copied. It only answers requests that carry your secret.';
+          // The secret was just made: keep it, so saving this form doesn't blank it.
+          const fresh = await api.invoke<Settings>('settings:get');
+          c = { ...c, token: fresh.todo.sheet.token };
+          onChange(c);
         } }, 'Copy the script'), ' ', out),
         h('li', null, 'Click Deploy, then New deployment. Choose Web app, set "Execute as" to Me and "Who has access" to Anyone, then Deploy and allow access.'),
         h('li', null, 'Copy the Web app URL (it ends in /exec) and paste it into the box above instead of the sheet link.'),
       ),
+      h('p', { class: 'muted' }, 'Set it up before? Paste the new script over the old one, then choose Deploy, Manage deployments, the pencil, New version, Deploy. The link stays the same.'),
     );
+  };
+
+  const connect = async () => {
+    connecting = true;
+    connectError = '';
+    draw();
+    const pv = await api.invoke<SheetPreview>('todos:sheetConnect', c);
+    connecting = false;
+    if (!pv.ok) {
+      connectError = pv.error ?? 'Could not connect that sheet.';
+      lastPreview = pv;
+      draw();
+      return;
+    }
+    opts.connect?.();
   };
 
   const draw = () => {
@@ -2988,43 +3050,53 @@ function sheetSetup(initial: SheetSettings, onChange: (c: SheetSettings) => void
       url.addEventListener('change', () => set({ url: url.value.trim() }));
       url.addEventListener('paste', () => setTimeout(() => set({ url: url.value.trim() }), 0));
       box.append(h('div', { class: 'add-row' }, url, h('button', { class: 'btn btn-small', type: 'button', onclick: () => set({ url: url.value.trim() }) }, 'Check')));
-      box.append(h('p', { class: 'hint-line' }, 'Works with a link shared as "Anyone with the link can view", or with the private connector below.'));
+      box.append(h('p', { class: 'hint-line' }, 'A link shared as "Anyone with the link can view" is read-only; the private connector lets Lock In add its tab and write to it.'));
     } else {
       const pick = h('button', { class: 'btn btn-small', type: 'button', onclick: async () => {
         const path = await api.invoke<string | null>('todos:pickSheetFile');
         if (path) set({ path });
       } }, c.path ? 'Choose a different file' : 'Choose file');
-      box.append(h('div', { class: 'add-row' }, pick, c.path ? h('span', { class: 'file-path', title: c.path }, c.path.split('/').pop() ?? c.path) : h('span', { class: 'muted' }, 'No file chosen')));
+      const make = h('button', { class: 'btn btn-small btn-quiet', type: 'button', title: 'An Excel file with just the Lock In tab. Opens in Excel, Numbers or Google Sheets.', onclick: async () => {
+        const path = await api.invoke<string | null>('todos:newSheetFile');
+        if (path) set({ path, own: true, tab: '' });
+      } }, 'Make a new one');
+      box.append(h('div', { class: 'add-row' }, pick, make, c.path ? h('span', { class: 'file-path', title: c.path }, c.path.split('/').pop() ?? c.path) : h('span', { class: 'muted' }, 'No file chosen')));
     }
 
-    const tabs = lastPreview?.tabs ?? [];
-    let tab: HTMLElement;
-    if (tabs.length) {
-      const cur = tabs.find((x) => x.toLowerCase() === c.tab.trim().toLowerCase()) ?? (c.tab.trim() ? c.tab.trim() : '');
-      const sel = h(
-        'select',
-        { 'aria-label': 'Tab' },
-        h('option', { value: '', selected: cur === '' }, 'Pick the right one for me'),
-        cur && !tabs.includes(cur) ? h('option', { value: cur, selected: true }, `${cur} (not found)`) : null,
-        tabs.map((x) => h('option', { value: x, selected: cur === x }, x)),
-      );
-      sel.addEventListener('change', () => set({ tab: sel.value }));
-      tab = sel;
-    } else {
-      const inp = h('input', { type: 'text', value: c.tab, placeholder: 'Blank = pick it for me', 'aria-label': 'Tab name' });
+    // Which tab: Lock In's own (made from the template), or one of yours.
+    const csv = c.kind === 'file' && /\.(csv|tsv|txt)$/i.test(c.path);
+    const tabs = (lastPreview?.tabs ?? []).filter((x) => x.toLowerCase() !== 'lock in');
+    const cur = c.own ? '__own' : tabs.find((x) => x.toLowerCase() === c.tab.trim().toLowerCase()) ?? (c.tab.trim() ? c.tab.trim() : '');
+    const sel = h(
+      'select',
+      { 'aria-label': 'Tab' },
+      h('option', { value: '__own', selected: cur === '__own' }, csv ? 'Lock In’s columns (the template)' : 'A new “Lock In” tab (recommended)'),
+      h('option', { value: '', selected: cur === '' }, csv ? 'Read the file as it is' : 'One of my tabs: pick the right one for me'),
+      cur && cur !== '__own' && !tabs.includes(cur) ? h('option', { value: cur, selected: true }, `${cur}${tabs.length ? ' (not found)' : ''}`) : null,
+      csv ? null : tabs.map((x) => h('option', { value: x, selected: cur === x }, `My tab: ${x}`)),
+    );
+    sel.addEventListener('change', () => set(sel.value === '__own' ? { own: true, tab: '' } : { own: false, tab: sel.value }));
+    const row = h('div', { class: 'add-row tab-row' }, h('label', null, csv ? 'Use' : 'Tab'), sel);
+    if (!csv && !c.own && !tabs.length) {
+      const inp = h('input', { type: 'text', value: c.tab, placeholder: 'Or type a tab name', 'aria-label': 'Tab name' });
       inp.addEventListener('change', () => set({ tab: inp.value.trim() }));
-      tab = inp;
+      row.append(inp);
     }
-    box.append(h('div', { class: 'add-row tab-row' }, h('label', null, 'Tab'), tab));
+    box.append(row);
 
     box.append(status);
     clear(status);
     const pv = lastPreview;
     if (pv) {
       if (pv.error) status.append(h('p', { class: 'sheet-error', role: 'alert' }, pv.error));
-      if (pv.ok) {
+      if (pv.ok && pv.willCreate) {
+        status.append(
+          h('p', { class: 'sheet-found' }, h('b', null, csv ? 'Lock In will set this file up as your list' : 'Lock In will add a “Lock In” tab'), pv.seed ? ` with your ${pv.seed} open ${pv.seed === 1 ? 'to-do' : 'to-dos'}` : '', '. Your other tabs stay exactly as they are.'),
+          templatePreview(pv.sample),
+        );
+      } else if (pv.ok) {
         const where = pv.tab ? ` in the "${pv.tab}" tab` : '';
-        const why = pv.tabWhy && !c.tab.trim() ? ` (picked because ${pv.tabWhy})` : '';
+        const why = pv.tabWhy && !c.tab.trim() && !c.own ? ` (picked because ${pv.tabWhy})` : '';
         status.append(
           h(
             'p',
@@ -3037,45 +3109,136 @@ function sheetSetup(initial: SheetSettings, onChange: (c: SheetSettings) => void
           ),
           h('p', { class: 'muted' }, describeMap(pv), pv.headerRow ? ` Column names are on row ${pv.headerRow}; everything above it is ignored.` : ''),
         );
-        if (pv.skipped) status.append(h('p', { class: 'muted' }, `Left out ${pv.skipped} ${pv.skipped === 1 ? 'row that isn\u2019t a task' : 'rows that aren\u2019t tasks'} (titles, totals, notes): ${pv.skippedSample.map((x) => `"${x.length > 40 ? `${x.slice(0, 40)}…` : x}"`).join(', ')}${pv.skipped > pv.skippedSample.length ? '…' : ''}`));
+        if (pv.skipped) status.append(h('p', { class: 'muted' }, `Left out ${pv.skipped} ${pv.skipped === 1 ? 'row that isn’t a task' : 'rows that aren’t tasks'} (titles, totals, notes): ${pv.skippedSample.map((x) => `"${x.length > 40 ? `${x.slice(0, 40)}…` : x}"`).join(', ')}${pv.skipped > pv.skippedSample.length ? '…' : ''}`));
         if (pv.map.assignee !== null && pv.owners.length >= 2) {
-          const cur = c.owner === null ? '__auto' : c.owner;
+          const curOwner = c.owner === null ? '__auto' : c.owner;
           const who = h(
             'select',
             { 'aria-label': 'Whose tasks' },
-            h('option', { value: '__auto', selected: cur === '__auto' }, `Mine${c.owner === null && pv.owner ? ` (${pv.owner})` : ''}`),
-            h('option', { value: '', selected: cur === '' }, 'Everyone'),
-            pv.owners.map((o) => h('option', { value: o, selected: cur === o }, o)),
+            h('option', { value: '__auto', selected: curOwner === '__auto' }, `Mine${c.owner === null && pv.owner ? ` (${pv.owner})` : ''}`),
+            h('option', { value: '', selected: curOwner === '' }, 'Everyone'),
+            pv.owners.map((o) => h('option', { value: o, selected: curOwner === o }, o)),
           );
           who.addEventListener('change', () => set({ owner: who.value === '__auto' ? null : who.value }));
           status.append(h('label', { class: 'col-pick wide' }, 'Whose tasks count', who));
         }
-        if (!pv.canComplete) status.append(h('p', { class: 'muted' }, 'Ticking a task in Lock In marks it done here, but the sheet itself stays as it is. Ticks you make in the sheet show up within two minutes.'));
+        status.append(
+          h(
+            'p',
+            { class: 'muted' },
+            pv.writable
+              ? pv.canComplete
+                ? 'To-dos you add or tick in Lock In go straight into this sheet, and rows you add there show up here within two minutes.'
+                : 'To-dos you add in Lock In go into this sheet. It has no done column, so ticks stay in Lock In.'
+              : 'This link is read-only: to-dos you add or tick in Lock In are kept in Lock In. Set up the private connector to have them written into the sheet.',
+          ),
+        );
       }
-      if (!compact && pv.columns.length) {
-        const sel = (label: string, key: 'task' | 'done' | 'due' | 'priority' | 'assignee', allowNone: boolean) => {
-          const cur = c[key];
+      if (!compact && !c.own && pv.columns.length) {
+        const pickCol = (label: string, key: 'task' | 'done' | 'due' | 'priority' | 'assignee', allowNone: boolean) => {
+          const v = c[key];
           const s = h(
             'select',
             { 'aria-label': `${label} column` },
-            h('option', { value: '', selected: cur === null }, `Auto${pv.map[key] !== null ? ` (${pv.columns[pv.map[key]!]})` : ''}`),
-            allowNone ? h('option', { value: '-1', selected: cur === -1 }, 'None') : null,
-            pv.columns.map((col, i) => h('option', { value: String(i), selected: cur === i }, col)),
+            h('option', { value: '', selected: v === null }, `Auto${pv.map[key] !== null ? ` (${pv.columns[pv.map[key]!]})` : ''}`),
+            allowNone ? h('option', { value: '-1', selected: v === -1 }, 'None') : null,
+            pv.columns.map((col, i) => h('option', { value: String(i), selected: v === i }, col)),
           );
           s.addEventListener('change', () => set({ [key]: s.value === '' ? null : Number(s.value) } as Partial<SheetSettings>));
           return h('label', { class: 'col-pick' }, label, s);
         };
         const scope = h('select', { 'aria-label': 'Which rows count' }, h('option', { value: 'all', selected: c.scope === 'all' }, 'Every open row'), h('option', { value: 'due', selected: c.scope === 'due' }, 'Only rows due today or earlier, plus undated ones'));
         scope.addEventListener('change', () => set({ scope: scope.value as SheetSettings['scope'] }));
-        status.append(h('div', { class: 'col-picks' }, sel('Task', 'task', false), sel('Done', 'done', true), sel('Due date', 'due', true), sel('Priority', 'priority', true), sel('Assigned to', 'assignee', true)), h('label', { class: 'col-pick wide' }, 'Rows that count', scope));
+        status.append(h('div', { class: 'col-picks' }, pickCol('Task', 'task', false), pickCol('Done', 'done', true), pickCol('Due date', 'due', true), pickCol('Priority', 'priority', true), pickCol('Assigned to', 'assignee', true)), h('label', { class: 'col-pick wide' }, 'Rows that count', scope));
       }
     }
-    if (c.kind === 'google' && (!compact || /private/i.test(pv?.error ?? '')) && !/\/exec\b/.test(c.url)) box.append(connector());
+    if (opts.connect && (c.url.trim() || c.path.trim())) {
+      const go = h('button', { class: 'btn btn-primary', type: 'button', disabled: connecting || !pv?.ok, onclick: () => void connect() }, connecting ? 'Connecting…' : pv?.willCreate ? (csv ? 'Set it up' : 'Add the Lock In tab') : 'Use this sheet');
+      box.append(h('div', { class: 'sheet-go' }, go, connectError ? h('span', { class: 'sheet-error', role: 'alert' }, connectError) : null));
+    }
+    const needsConnector = c.kind === 'google' && !/\/exec\b/.test(c.url) && (!compact || c.own || /private|connector/i.test(pv?.error ?? ''));
+    if (needsConnector) box.append(connector());
   };
 
   draw();
   void check();
   return box;
+}
+
+/** Your Lock In list's spreadsheet: connected (what it's doing, open it, stop), or an invitation to add one. */
+function listSheetSection(st: Settings): HTMLElement {
+  const wrap = h('div', { class: 'list-sheet' });
+  if (st.todo.provider === 'sheet') {
+    const c = st.todo.sheet;
+    const where = c.kind === 'file' ? c.path.split('/').pop() ?? c.path : 'your Google Sheet';
+    const open = h('button', { class: 'btn btn-small', type: 'button', onclick: () => void api.invoke('todos:openSheet') }, 'Open it');
+    const stop = h('button', { class: 'btn btn-small btn-quiet', type: 'button' }, 'Stop using it');
+    stop.addEventListener('click', async () => {
+      if (stop.dataset.sure !== '1') {
+        stop.dataset.sure = '1';
+        stop.textContent = c.own ? 'Click again: your open to-dos come back here' : 'Click again to stop';
+        return;
+      }
+      await api.invoke('todos:sheetDisconnect');
+      settings = await api.invoke<Settings>('settings:get');
+      void renderTodos();
+    });
+    let timer: ReturnType<typeof setTimeout> | null = null;
+    const adjust = h(
+      'details',
+      { class: 'how sheet-adjust' },
+      h('summary', null, 'Change the sheet, tab or columns'),
+      sheetSetup(c, (next) => {
+        st.todo.sheet = next;
+        if (timer) clearTimeout(timer);
+        timer = setTimeout(async () => {
+          await saveTodo({ sheet: next });
+          await api.invoke('todos:refresh');
+        }, 400);
+      }, false),
+    );
+    wrap.append(
+      h(
+        'div',
+        { class: 'sheet-linked' },
+        h('span', { class: 'sheet-ico', 'aria-hidden': 'true' }, '▦'),
+        h(
+          'div',
+          { class: 'sheet-linked-text' },
+          h('b', null, c.own ? `Synced with the “Lock In” tab in ${where}` : `Synced with ${c.tab.trim() ? `the “${c.tab.trim()}” tab in ` : ''}${where}`),
+          h('span', { class: 'muted' }, 'Add or tick a to-do here and it lands in the sheet; add a row there and it shows up here.'),
+        ),
+        h('div', { class: 'sheet-linked-act' }, open, stop),
+      ),
+      adjust,
+    );
+    return wrap;
+  }
+  // Not yet: show what it would look like, and set it up in place.
+  const body = h('div', { class: 'sheet-invite-body' });
+  const example = templatePreview();
+  const start = h('button', { class: 'btn btn-small btn-ink', type: 'button' }, 'Set it up');
+  start.addEventListener('click', () => {
+    start.hidden = true;
+    example.hidden = true; // the setup shows the tab with your own to-dos instead
+    let draft: SheetSettings = { ...st.todo.sheet, own: true, tab: '' };
+    body.append(sheetSetup(draft, (next) => (draft = next), false, { connect: async () => {
+      settings = await api.invoke<Settings>('settings:get');
+      void renderTodos();
+    } }));
+  });
+  wrap.append(
+    h(
+      'div',
+      { class: 'sheet-invite' },
+      h('h3', null, 'Keep this list in a spreadsheet too'),
+      h('p', { class: 'muted' }, 'Lock In adds a tab like this to your Google Sheet, Excel, Numbers or CSV file, with your to-dos in it. Add or tick something here and it lands in the sheet; add a row there and it shows up here.'),
+      example,
+      start,
+      body,
+    ),
+  );
+  return wrap;
 }
 
 // -----------------------------------------------------------------------------
@@ -3354,6 +3517,7 @@ function crewView(v: CrewView): Node[] {
         h('b', null, m.name, m.me ? h('span', { class: 'you' }, ' (you)') : null),
         h('span', { class: 'what' }, stateText(m)),
         h('span', { class: 'stats' }, `${minutes(m.stats.todayMin)} today${m.stats.streak ? `, ${m.stats.streak}-day streak` : ''}`),
+        m.todos ? crewTodos(m) : null,
       ),
     );
     if (!m.me) {
@@ -3370,7 +3534,14 @@ function crewView(v: CrewView): Node[] {
     list.append(row);
     if (aim.id === m.id && m.bombable && v.bombsLeft > 0) list.append(bombPicker(m, v));
   }
-  out.push(h('div', { class: 'section', id: 'crew-sec' }, h('h2', null, 'Your crew'), list, v.members.length === 1 ? h('p', { class: 'muted' }, "It's just you so far. Invite friends with the code.") : null));
+  const shareNudge = settings?.crew.shareTodos
+    ? null
+    : h('p', { class: 'muted share-nudge' }, 'Your crew can’t see your to-dos. ', h('button', { class: 'link-btn', type: 'button', onclick: async () => {
+        crewData = await api.invoke<CrewPayload>('crew:settings', { shareTodos: true });
+        settings = await api.invoke<Settings>('settings:get');
+        void renderFriends(crewData ?? undefined, true);
+      } }, 'Share my to-dos'), ' so everyone’s on the same page.');
+  out.push(h('div', { class: 'section', id: 'crew-sec' }, h('h2', null, 'Your crew'), list, v.members.length === 1 ? h('p', { class: 'muted' }, "It's just you so far. Invite friends with the code.") : null, shareNudge));
 
   // Most roasted this week.
   const ranked = [...v.members].sort((a, b) => b.stats.roastedWeek - a.stats.roastedWeek || b.stats.weekMin - a.stats.weekMin || a.name.localeCompare(b.name));
@@ -3407,9 +3578,29 @@ function crewView(v: CrewView): Node[] {
 
   // What's been happening.
   const feed = h('ul', { class: 'crew-feed' }, v.feed.slice(0, 15).map((f) => h('li', { 'data-kind': f.kind }, h('span', { class: 'when' }, clockTime(f.at)), h('span', null, f.text))));
-  out.push(h('div', { class: 'section', id: 'feed-sec' }, h('h2', null, 'Crew feed'), v.feed.length ? feed : h('p', { class: 'muted' }, 'Nothing yet. Bombs, lock-ins and achievements show up here.')));
+  out.push(h('div', { class: 'section', id: 'feed-sec' }, h('h2', null, 'Crew feed'), v.feed.length ? feed : h('p', { class: 'muted' }, 'Nothing yet. Bombs, lock-ins, finished to-dos and achievements show up here.')));
   return out;
 }
+
+/** A friend's shared to-dos: the count, and the list one click away. */
+function crewTodos(m: CrewMemberView): HTMLElement {
+  const t = m.todos!;
+  const more = (shown: number, total: number) => (total > shown ? h('li', { class: 'more' }, `and ${total - shown} more`) : null);
+  const key = `crew-todos:${m.id}`;
+  const box = h(
+    'details',
+    { class: 'crew-todos' },
+    h('summary', null, `${t.openCount} to do · ${t.doneCount} done today`),
+    t.open.length ? h('ul', { class: 'open' }, t.open.map((x) => h('li', null, x)), more(t.open.length, t.openCount)) : null,
+    t.done.length ? h('ul', { class: 'done' }, t.done.map((x) => h('li', null, x)), more(t.done.length, t.doneCount)) : null,
+    !t.open.length && !t.done.length ? h('p', { class: 'muted' }, m.me ? 'Your list is empty.' : 'Their list is empty.') : null,
+  );
+  // Stays open across the crew page's live redraws.
+  if (openTodoLists.has(key)) box.setAttribute('open', '');
+  box.addEventListener('toggle', () => (box.hasAttribute('open') ? openTodoLists.add(key) : openTodoLists.delete(key)));
+  return box;
+}
+const openTodoLists = new Set<string>();
 
 function bombPicker(m: CrewMemberView, v: CrewView): HTMLElement {
   const note = h('p', { class: 'picker-note', 'aria-live': 'polite' });
@@ -3514,6 +3705,7 @@ function crewSettingsSection(v: CrewView): HTMLElement {
     h('summary', null, 'Crew settings'),
     field('Your name', 'What your crew sees.', name),
     field('Share what I’m working on', 'Friends see your session goal while you’re locked in.', sw(st.shareGoal, (on) => void save({ shareGoal: on }), 'Share what I’m working on')),
+    field('Share my to-dos', 'Your crew sees your open to-dos and everything you finished today, and the feed says when you finish one. Everyone on the same page.', sw(st.shareTodos === true, (on) => void save({ shareTodos: on }), 'Share my to-dos')),
     field('Share what’s distracting me', 'Friends see the site or app you’re drifting on (never private or sensitive ones). Makes for better bombs.', sw(st.shareDistraction, (on) => void save({ shareDistraction: on }), 'Share what’s distracting me')),
     field('Bombs take over my screen', 'Off: friends’ bombs arrive as a corner card instead. They’re always gentle in meetings, on calls, on mute and in quiet hours.', sw(st.bombsFullScreen, (on) => void save({ bombsFullScreen: on }), 'Bombs take over my screen')),
     field('Bombs lock my distractions', 'For 5 minutes after a bomb lands, distracting sites are blocked (with the browser extension) and distracting apps are hidden as soon as you open them.', sw(st.bombsLockout !== false, (on) => void save({ bombsLockout: on }), 'Bombs lock my distractions')),

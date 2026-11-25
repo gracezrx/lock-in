@@ -9,7 +9,9 @@ import { dayKey } from './day';
 import { DoneLog, type DoneEntry } from './donelog';
 import { bestMatch, splitDone } from './match';
 import { BuiltinProvider, RemindersProvider, ThingsProvider, TodoistProvider, rankTasks, type TodoProvider } from './providers';
-import { SheetProvider, appsScript, type TrackState } from './sheet';
+import { SheetProvider, appsScript, canWrite, sheetMode, type TrackState } from './sheet';
+import { localDate } from './day';
+import type { TemplateRow } from './template';
 import { TodoWatchdog, type WatchEvent, type WatchState } from './watchdog';
 
 const REFRESH_MS = 120_000;
@@ -34,6 +36,8 @@ export class TodoManager {
     private settings: () => Settings,
     private onEvents: (events: WatchEvent[]) => void,
     private log: (m: string) => void,
+    /** Keeps a copy of a spreadsheet before Lock In first changes it. */
+    private backup: (path: string) => void = () => undefined,
   ) {
     this.builtin = new BuiltinProvider(
       () => store.readJson('todos.json', []),
@@ -90,12 +94,57 @@ export class TodoManager {
       },
       saveState: (state) => this.store.writeJson('sheet-state.json', { source: source(), state }),
       me: () => this.me,
+      seed: () => this.builtinOpen(),
+      backup: (path) => this.backupOnce(path),
     });
+  }
+
+  private backedUp = new Set<string>();
+
+  /** One copy of each spreadsheet per run, before Lock In first writes to it. */
+  private backupOnce(path: string): void {
+    if (this.backedUp.has(path)) return;
+    this.backedUp.add(path);
+    this.backup(path);
+  }
+
+  /** Your open Lock In to-dos, as rows for a new Lock In tab. */
+  builtinOpen(): TemplateRow[] {
+    return this.store
+      .readJson<(Task & { createdAt?: number })[]>('todos.json', [])
+      .filter((t) => !t.completed)
+      .map((t) => ({ title: t.title, due: t.due, priority: t.priority, project: t.project, added: t.createdAt ? localDate(t.createdAt) : undefined }));
   }
 
   /** Setup screen: read a sheet with the given (unsaved) settings and report what was found. */
   async previewSheet(c: SheetSettings): Promise<SheetPreview> {
-    return new SheetProvider({ cfg: () => c, loadState: () => null, saveState: () => undefined, me: () => this.me }).preview();
+    return new SheetProvider({ cfg: () => c, loadState: () => null, saveState: () => undefined, me: () => this.me, seed: () => this.builtinOpen() }).preview();
+  }
+
+  /**
+   * Connects a spreadsheet to your list: adds Lock In's tab (with your open to-dos) when that's
+   * what you picked, then reports what's there. The caller saves the settings when it's ok.
+   */
+  async connectSheet(c: SheetSettings): Promise<SheetPreview> {
+    const p = this.sheetProvider(() => c);
+    try {
+      await p.ensureOwnTab();
+    } catch (e) {
+      return { ...(await p.preview()), ok: false, error: (e as Error).message };
+    }
+    return p.preview();
+  }
+
+  /**
+   * Back to the list kept in Lock In. With Lock In's own tab, its open to-dos come along (the tab
+   * stays in the sheet as it is); with a tab of yours, your Lock In list is as you left it.
+   */
+  async disconnectSheet(): Promise<void> {
+    const t = this.settings().todo;
+    if (t.provider !== 'sheet' || !t.sheet.own) return;
+    const open = rankless(this.watchdog.openTasks);
+    if (!open.length && this.error) return; // couldn't read the sheet: keep the Lock In list as it was
+    await this.builtin.replaceOpen(open.map((x) => ({ title: x.title, due: x.due, priority: x.priority, project: x.project })));
   }
 
   /** The private Google connector script, with this install's secret (made on first use). */
@@ -286,8 +335,10 @@ export class TodoManager {
     return ok;
   }
 
-  async removeBuiltin(id: string): Promise<void> {
-    await this.builtin.remove(id);
+  /** Deletes a to-do from the Lock In list, or one added in Lock In that isn't in your sheet yet. */
+  async remove(id: string): Promise<void> {
+    if (id.startsWith('new:') && this.provider instanceof SheetProvider) await this.provider.remove(id);
+    else await this.builtin.remove(id);
     await this.refresh(true);
   }
 
@@ -316,14 +367,19 @@ export class TodoManager {
       nextRoastInMin: left === undefined ? undefined : Math.ceil(left / 60),
       canComplete: this.provider?.canComplete ?? true,
       canAdd: this.provider?.canAdd ?? true,
-      tickNote:
-        this.provider?.writesBack === false
-          ? t.sheet.kind === 'google'
-            ? 'Ticks here are saved in Lock In. Your Google Sheet stays as it is unless you set up the private connector below.'
-            : 'Ticks here are saved in Lock In. Your file stays as it is, so tick it there too when you next open it.'
-          : undefined,
+      tickNote: t.provider === 'sheet' ? this.sheetNote() : undefined,
       hidden: (t.hidden ?? []).length,
     };
+  }
+
+  /** How your sheet and Lock In are kept in step, when it isn't simply "both ways". */
+  private sheetNote(): string | undefined {
+    const p = this.provider;
+    if (!(p instanceof SheetProvider)) return undefined;
+    if (p.waiting) return `${p.waiting} Lock In keeps your new to-dos and ticks until then.`;
+    if (!canWrite(sheetMode(this.settings().todo.sheet))) return 'New to-dos and ticks are kept in Lock In; this shared Google link is read-only. Set up the private connector (under Your list) and Lock In writes them into the sheet.';
+    if (!p.writesBack) return 'This tab has no done column, so ticks stay in Lock In. New to-dos go into the sheet.';
+    return undefined;
   }
 
   private persist(force = false): void {
@@ -334,3 +390,14 @@ export class TodoManager {
 }
 
 export const hideKey = (title: string) => title.toLowerCase().replace(/\s+/g, ' ').trim();
+
+/** Open tasks without the ones that were only ever in Lock In twice (same title). */
+function rankless(tasks: Task[]): Task[] {
+  const seen = new Set<string>();
+  return tasks.filter((t) => {
+    const k = hideKey(t.title);
+    if (seen.has(k)) return false;
+    seen.add(k);
+    return true;
+  });
+}

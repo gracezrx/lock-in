@@ -359,14 +359,14 @@ export const DEFAULT_TODO: TodoSettings = {
 export const DEFAULT_TALK: TalkSettings = { afterRoast: true, maxMinutes: 5, holdSpace: true };
 export const DEFAULT_CALENDAR: CalendarSettings = { urls: [], mac: false, quietInMeetings: true, headsUpMin: 5, offerGaps: true, capSessions: true };
 export const DEFAULT_EXPORT: ExportSettings = { auto: true, folder: '' };
-export const DEFAULT_CREW: CrewSettings = { code: '', crewName: '', name: '', server: 'https://ntfy.sh', shareGoal: true, shareDistraction: false, bombsFullScreen: true, bombsLockout: true };
+export const DEFAULT_CREW: CrewSettings = { code: '', crewName: '', name: '', server: 'https://ntfy.sh', shareGoal: true, shareDistraction: false, shareTodos: false, bombsFullScreen: true, bombsLockout: true };
 
 export const TODO_PROVIDERS: { id: TodoSettings['provider']; label: string; help: string }[] = [
   { id: 'reminders', label: 'Apple Reminders', help: 'Reads your Reminders on this Mac. macOS asks permission once.' },
   { id: 'things', label: 'Things 3', help: 'Reads your Today list in Things. macOS asks permission once.' },
   { id: 'todoist', label: 'Todoist', help: 'Needs your Todoist API token (Settings, Integrations, Developer).' },
+  { id: 'builtin', label: 'Lock In list', help: 'Kept here, and in a spreadsheet tab too if you add one: Google Sheets, Excel, Numbers or CSV.' },
   { id: 'sheet', label: 'Spreadsheet', help: 'Google Sheets, Excel, Numbers or CSV. Finds the task and done columns for you.' },
-  { id: 'builtin', label: 'Lock In list', help: 'A simple list kept in this app.' },
   { id: 'none', label: 'No to-do list', help: 'Turns off to-do roasts and celebrations.' },
 ];
 

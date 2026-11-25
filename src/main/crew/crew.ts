@@ -8,12 +8,19 @@
 // ignores stale bombs (sent while they were offline), and bounces bombs that arrive after they
 // locked in (the thrower gets that bomb back).
 import { randomUUID } from 'node:crypto';
-import type { CrewFeedItem, CrewMemberView, CrewSettings, CrewState, CrewStats, CrewView } from '../../shared/types';
+import type { CrewFeedItem, CrewMemberView, CrewSettings, CrewState, CrewStats, CrewTodos, CrewView } from '../../shared/types';
 import { codeSecret, crewKeys, formatCode, newCode, open, seal, type CrewKeys } from './code';
 import type { Relay, RelayMessage } from './relay';
 
 export const BOMBS_PER_DAY = 3;
 export const MAX_INSULT = 140;
+/** Shared to-dos: a few titles each, short, and small enough that a status stays one relay message. */
+export const TODO_TITLE_MAX = 60;
+const TODO_OPEN_MAX = 8;
+const TODO_DONE_MAX = 12;
+const TODO_BYTES = 1800;
+/** At most this many "finished" lines in the feed from one status. */
+const DONE_FEED_MAX = 3;
 
 export const INSULTS = [
   'Touch grass later. Touch your to-do list now.',
@@ -44,6 +51,8 @@ export interface LocalStatus {
   distraction?: string;
   sessionMin?: number;
   stats: CrewStats;
+  /** Your to-dos, when you share them. */
+  todos?: CrewTodos;
 }
 
 interface Base {
@@ -62,6 +71,7 @@ interface StatusMsg extends Base {
   distraction?: string;
   sessionMin?: number;
   stats: CrewStats;
+  todos?: CrewTodos;
 }
 interface BombMsg extends Base {
   t: 'bomb';
@@ -95,6 +105,7 @@ interface MemberRec {
   distraction?: string;
   sessionMin?: number;
   stats: CrewStats;
+  todos?: CrewTodos;
   lastSeen: number;
   /** When their latest status was sent (older ones arriving late are ignored). */
   statusAt?: number;
@@ -166,6 +177,31 @@ function statsOf(x: unknown): CrewStats {
   };
 }
 
+/**
+ * Your to-dos as friends will see them: a few short titles, most urgent first, trimmed until the
+ * whole thing fits in one relay message.
+ */
+export function packTodos(open: string[], done: string[]): CrewTodos {
+  const titles = (xs: string[], max: number) => xs.map((x) => clean(x, TODO_TITLE_MAX)).filter(Boolean).slice(0, max);
+  const out: CrewTodos = { open: titles(open, TODO_OPEN_MAX), done: titles(done, TODO_DONE_MAX), openCount: open.length, doneCount: done.length };
+  const bytes = () => Buffer.byteLength(JSON.stringify(out), 'utf8');
+  while (bytes() > TODO_BYTES && (out.open.length || out.done.length)) {
+    if (out.done.length > out.open.length) out.done.pop();
+    else out.open.pop();
+  }
+  return out;
+}
+
+function todosOf(x: unknown): CrewTodos | undefined {
+  if (!x || typeof x !== 'object') return undefined;
+  const t = x as Partial<CrewTodos>;
+  const list = (v: unknown, max: number) => (Array.isArray(v) ? v.filter((y): y is string => typeof y === 'string').map((y) => clean(y, TODO_TITLE_MAX)).filter(Boolean).slice(0, max) : []);
+  const n = (v: unknown, min: number) => (typeof v === 'number' && Number.isFinite(v) ? Math.max(min, Math.min(10_000, Math.round(v))) : min);
+  const open = list(t.open, TODO_OPEN_MAX);
+  const done = list(t.done, TODO_DONE_MAX);
+  return { open, done, openCount: n(t.openCount, open.length), doneCount: n(t.doneCount, done.length) };
+}
+
 /** A message from the wire, checked field by field (anything off is dropped). */
 export function parseMsg(x: unknown): Msg | null {
   const m = x as Partial<Msg> & Record<string, unknown>;
@@ -183,6 +219,7 @@ export function parseMsg(x: unknown): Msg | null {
         distraction: m.distraction ? clean(m.distraction, 40) : undefined,
         sessionMin: typeof m.sessionMin === 'number' ? Math.max(0, Math.min(600, Math.round(m.sessionMin))) : undefined,
         stats: statsOf(m.stats),
+        todos: todosOf(m.todos),
       };
     case 'bomb':
       if (typeof m.id !== 'string' || typeof m.to !== 'string') return null;
@@ -327,8 +364,13 @@ export class Crew {
       m.lastSeen = Math.max(m.lastSeen, Math.min(msg.at, now));
       if (msg.t === 'status' && msg.at >= (m.statusAt ?? 0)) {
         const lockedNow = msg.state === 'locked' && m.state !== 'locked' && now - msg.at < 5 * 60_000;
-        Object.assign(m, { state: msg.state, since: msg.since, goal: msg.goal, distraction: msg.distraction, sessionMin: msg.sessionMin, stats: msg.stats, statusAt: msg.at });
+        // Finished since their last status (same day): tell the crew. Their first status after you
+        // join only sets the baseline, so you don't get a flood of old ticks.
+        const before = m.todos && m.statusAt && dayOf(m.statusAt) === dayOf(msg.at) ? new Set(m.todos.done.map((x) => x.toLowerCase())) : null;
+        const finished = before && msg.todos ? msg.todos.done.filter((x) => !before.has(x.toLowerCase())).slice(0, DONE_FEED_MAX) : [];
+        Object.assign(m, { state: msg.state, since: msg.since, goal: msg.goal, distraction: msg.distraction, sessionMin: msg.sessionMin, stats: msg.stats, todos: msg.todos, statusAt: msg.at });
         if (lockedNow) this.feed('session', `${msg.name} locked in${msg.goal ? ` on ${msg.goal}` : ''}.`, msg.at);
+        for (const title of finished.reverse()) this.feed('done', `${msg.name} finished “${title}”.`, msg.at);
       }
     }
     if (msg.t === 'bomb') this.bombArrived(msg, now);
@@ -432,11 +474,13 @@ export class Crew {
     if (!this.keys || !this.connected) return;
     const now = this.now();
     const local = this.d.local();
-    const sig = JSON.stringify([local.state, local.goal ?? '', local.distraction ?? '']);
+    // To-dos are news too, but they settle like drifting does (no flicker while you tick a few off).
+    const sig = JSON.stringify([local.state, local.goal ?? '', local.distraction ?? '', local.todos ? [local.todos.open, local.todos.done] : null]);
     let due = now - this.lastPublish > HEARTBEAT_MS;
     if (sig !== this.lastSig) {
       // Locking in (or out of) a session is news right away; drifting and free settle first.
-      const urgent = local.state === 'locked' || local.state === 'break' || this.lastSig.includes('"locked"') || this.lastSig.includes('"break"') || !this.lastSig;
+      const was = this.lastSig ? (JSON.parse(this.lastSig) as unknown[])[0] : null;
+      const urgent = local.state === 'locked' || local.state === 'break' || was === 'locked' || was === 'break' || !this.lastSig;
       if (urgent) due = true;
       else {
         if (!this.pending || this.pending.sig !== sig) this.pending = { sig, since: now };
@@ -447,7 +491,7 @@ export class Crew {
     this.lastSig = sig;
     this.lastPublish = now;
     this.pending = null;
-    void this.send({ t: 'status', state: local.state, since: local.since, goal: local.goal, distraction: local.distraction, sessionMin: local.sessionMin, stats: local.stats } as Partial<Msg>).then((ok) => {
+    void this.send({ t: 'status', state: local.state, since: local.since, goal: local.goal, distraction: local.distraction, sessionMin: local.sessionMin, stats: local.stats, todos: local.todos } as Partial<Msg>).then((ok) => {
       if (!ok) this.lastPublish = 0; // try again next tick
     });
   }
@@ -473,6 +517,7 @@ export class Crew {
       distraction: local.distraction,
       sessionMin: local.sessionMin,
       stats: local.stats,
+      todos: local.todos,
       lastSeen: now,
       bombable: false,
     };

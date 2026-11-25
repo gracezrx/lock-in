@@ -1,14 +1,14 @@
 // Lock In main process: wires sensors → classifier → session/drift → coach → UI.
 import { app, clipboard, dialog, globalShortcut, ipcMain, Menu, nativeImage, nativeTheme, Notification, powerMonitor, safeStorage, session as electronSession, shell, systemPreferences, Tray, type Rectangle } from 'electron';
 import { spawn } from 'node:child_process';
-import { existsSync, mkdirSync, readdirSync, readFileSync, writeFileSync } from 'node:fs';
+import { copyFileSync, existsSync, mkdirSync, readdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { homedir } from 'node:os';
-import { join } from 'node:path';
+import { basename, join } from 'node:path';
 import type { AttentionView, Goal, GoalQuestion, GoalSuggestion, GoalsView, PanelData, SessionRecord, CoachLineKind, CustomCoach, CustomCoachView, Channel, DashboardData, Deadline, LabeledSample, LiveState, MacCalendarInfo, Profile, RouteOption, Routine, SetupStatus, Settings, SheetSettings, SoundId, WeekDay } from '../shared/types';
 import { appUsage } from './apps';
 import { CalendarManager, fetchIcs } from './calendar';
 import { MacCalendar, defaultExcluded, macStatusMessage } from './maccal';
-import { Crew, type BombOutcome, type CrewData, type LocalStatus } from './crew/crew';
+import { Crew, packTodos, type BombOutcome, type CrewData, type LocalStatus } from './crew/crew';
 import { NtfyRelay, type Relay } from './crew/relay';
 import { TodoHistory } from './todos/history';
 import { makeBackup, prune as pruneBackups, readBackup, restore as restoreBackup } from './backup';
@@ -30,6 +30,8 @@ import { Announcer } from './coach/announcer';
 import { Notifier, type NotifyPayload } from './notify';
 import { RoutineScheduler, type RoutineState } from './routines';
 import { TodoManager } from './todos/manager';
+import { googleSheetId } from './todos/sheet';
+import { newTemplateWorkbook } from './todos/xlsxwrite';
 import { Coach } from './coach/coach';
 import { Claude, coachSystem, makeLabeler } from './coach/llm';
 import { Voice } from './coach/voice';
@@ -78,6 +80,17 @@ function log(m: string): void {
   console.log(line);
   logLines.push(line);
   if (logLines.length > 500) logLines.shift();
+}
+
+/** A copy of a spreadsheet before Lock In first changes it (the newest few are kept). */
+function backupSheet(path: string): void {
+  const dir = join(userDir(), 'sheet-backups');
+  mkdirSync(dir, { recursive: true });
+  const stamp = new Date().toISOString().replace(/[:.]/g, '-').slice(0, 19);
+  copyFileSync(path, join(dir, `${stamp} ${basename(path)}`));
+  const old = readdirSync(dir).sort().reverse().slice(10);
+  for (const f of old) rmSync(join(dir, f), { force: true });
+  log(`[todos] kept a copy of ${basename(path)} before writing to it`);
 }
 
 let store: Store;
@@ -489,6 +502,8 @@ function crewLocal(): LocalStatus {
     distraction: c.shareDistraction ? where : undefined,
     sessionMin: sess ? Math.round(sess.elapsedSec(now) / 60) : undefined,
     stats: myStats(now),
+    // Your list, and everything you finished today (ticked anywhere, or told the coach).
+    todos: c.shareTodos && todos ? packTodos(todos.openRanked().map((t) => t.title), todos.doneToday().map((t) => t.title)) : undefined,
   };
 }
 
@@ -2412,6 +2427,8 @@ function setupIpc(): void {
     const voiceChanged = s.voiceId !== undefined && s.voiceId !== settings.voiceId;
     if (voiceChanged && s.voiceName === undefined) s = { ...s, voiceName: undefined };
     const was = settings.telemetry;
+    // A page that loaded before the connector's secret was made doesn't get to blank it.
+    if (s.todo?.sheet && !s.todo.sheet.token && settings.todo.sheet.token) s = { ...s, todo: { ...s.todo, sheet: { ...s.todo.sheet, token: settings.todo.sheet.token } } };
     settings = { ...settings, ...s };
     store.saveSettings(settings);
     if (s.telemetry) {
@@ -2494,8 +2511,11 @@ function setupIpc(): void {
       pushState();
     }
   });
-  handle('todos:sheetPreview', (_e, c: SheetSettings) => todos.previewSheet({ ...settings.todo.sheet, ...c }));
+  // The connector's secret is made in the main process; a page's copy of the settings may not have it yet.
+  const withToken = (c: SheetSettings): SheetSettings => ({ ...settings.todo.sheet, ...c, token: c?.token || settings.todo.sheet.token });
+  handle('todos:sheetPreview', (_e, c: SheetSettings) => todos.previewSheet(withToken(c)));
   handle('todos:pickSheetFile', async () => {
+    if (SMOKE && process.env.LOCKIN_SHEET_FILE) return process.env.LOCKIN_SHEET_FILE;
     const opts: Electron.OpenDialogOptions = {
       title: 'Choose your to-do spreadsheet',
       properties: ['openFile'],
@@ -2529,8 +2549,48 @@ function setupIpc(): void {
   });
   handle('clipboard:write', (_e, text: string) => clipboard.writeText(String(text)));
   handle('todos:remove', async (_e, id: string) => {
-    await todos.removeBuiltin(String(id));
+    await todos.remove(String(id));
     pushState();
+  });
+  // Your list in a spreadsheet: connect (adding Lock In's tab), stop, make a new one, open it.
+  handle('todos:sheetConnect', async (_e, c: SheetSettings) => {
+    const sheet = withToken(c);
+    const pv = await todos.connectSheet(sheet);
+    if (pv.ok) {
+      settings = { ...settings, todo: { ...settings.todo, provider: 'sheet', sheet } };
+      store.saveSettings(settings);
+      telemetry?.track('sheet_connected', { mode: pv.mode, own: !!sheet.own, created: !!pv.willCreate });
+      await todos.refresh(true);
+      pushState();
+    }
+    return pv;
+  });
+  handle('todos:sheetDisconnect', async () => {
+    await todos.disconnectSheet();
+    settings = { ...settings, todo: { ...settings.todo, provider: 'builtin' } };
+    store.saveSettings(settings);
+    await todos.refresh(true);
+    pushState();
+    return true;
+  });
+  handle('todos:newSheetFile', async () => {
+    const opts: Electron.SaveDialogOptions = {
+      title: 'Make a to-do spreadsheet',
+      defaultPath: join(app.getPath('documents'), 'Lock In to-dos.xlsx'),
+      filters: [{ name: 'Excel workbook', extensions: ['xlsx'] }],
+    };
+    const r = windows.main ? await dialog.showSaveDialog(windows.main, opts) : await dialog.showSaveDialog(opts);
+    if (r.canceled || !r.filePath) return null;
+    const path = r.filePath.toLowerCase().endsWith('.xlsx') ? r.filePath : `${r.filePath}.xlsx`;
+    writeFileSync(path, newTemplateWorkbook(todos.builtinOpen()));
+    return path;
+  });
+  handle('todos:openSheet', async () => {
+    const c = settings.todo.sheet;
+    if (c.kind === 'file' && c.path) return (await shell.openPath(c.path)) === '';
+    const id = googleSheetId(c.url);
+    if (id) await shell.openExternal(`https://docs.google.com/spreadsheets/d/${id}/edit`);
+    return !!id;
   });
   handle('todos:roastTest', async (_e, severity: 1 | 2 | 3) => {
     const s = todos.summary();
@@ -3062,7 +3122,7 @@ async function boot(): Promise<void> {
         }
       });
     }
-  }, log);
+  }, log, backupSheet);
   todoHistory = new TodoHistory(store.dir);
   macCal = new MacCalendar({ bin: calendarReaderPath, run: SMOKE ? smokeMacCalendar : undefined, log });
   calendar = new CalendarManager({
@@ -3506,7 +3566,7 @@ async function newFeaturesSmoke(
 let smokeDeliver: ((from: { id: string; name: string }, msg: Record<string, unknown>) => void) | null = null;
 function smokeCrewRelay(): Relay {
   const friends = [
-    { id: 'sam', name: 'Sam', state: 'locked', goal: 'Problem set 4', sessionMin: 34, stats: { todayMin: 95, weekMin: 610, streak: 6, roastedWeek: 2, bombsThrownWeek: 4, achievements: 7 } },
+    { id: 'sam', name: 'Sam', state: 'locked', goal: 'Problem set 4', sessionMin: 34, stats: { todayMin: 95, weekMin: 610, streak: 6, roastedWeek: 2, bombsThrownWeek: 4, achievements: 7 }, todos: { open: ['Problem set 4', 'Email the TA about the midterm', 'Book flights home'], done: ['Read chapter 3', 'Gym'], openCount: 3, doneCount: 2 } },
     { id: 'lee', name: 'Lee', state: 'drifting', distraction: 'youtube.com', stats: { todayMin: 20, weekMin: 140, streak: 0, roastedWeek: 9, bombsThrownWeek: 1, achievements: 3 } },
     { id: 'maya', name: 'Maya', state: 'free', stats: { todayMin: 60, weekMin: 380, streak: 3, roastedWeek: 4, bombsThrownWeek: 6, achievements: 5 } },
   ];
@@ -4295,6 +4355,67 @@ async function lookShots(
   if (process.env.LOCKIN_OUTLINE) await outlineShots(wait, shot, nav);
 }
 
+/**
+ * LOCKIN_SHEET_FILE=<an .xlsx> (with LOCKIN_SMOKE and LOCKIN_SHOTS): the Lock In list kept in a
+ * spreadsheet, from the invitation to a connected sheet, and a crew sharing to-dos.
+ */
+async function sheetShots(
+  wait: (ms: number) => Promise<unknown>,
+  shot: (win: Electron.BrowserWindow | null, name: string) => Promise<void>,
+  nav: (r: string) => Promise<void>,
+): Promise<void> {
+  const w = windows.main!;
+  const js = (code: string) => w.webContents.executeJavaScript(code).catch((e: Error) => `ERR ${e.message}`);
+  const click = (text: string) => js(`[...document.querySelectorAll('button')].find((b) => b.textContent.trim().startsWith(${JSON.stringify(text)}))?.click()`);
+  if (!profile) {
+    profile = buildDefaultProfile('founder');
+    store.saveProfile(profile);
+  }
+  settings = { ...settings, todo: { ...settings.todo, provider: 'builtin' } };
+  store.saveSettings(settings);
+  for (const t of ['Finish problem set 4', 'Email the TA', 'Call the bank']) await todos.add(t);
+  await todos.refresh(true);
+  w.reload();
+  await wait(1800);
+  await nav('todos');
+  await wait(800);
+  await js(`document.querySelector('.list-sheet')?.scrollIntoView({ block: 'start' })`);
+  await wait(300);
+  await shot(w, 'S1-invite');
+  await click('Set it up');
+  await wait(400);
+  await click('Excel, Numbers or CSV file');
+  await wait(400);
+  await click('Choose file');
+  await wait(1500);
+  await js(`document.querySelector('.list-sheet')?.scrollIntoView({ block: 'start' })`);
+  await wait(300);
+  await shot(w, 'S2-preview');
+  await click('Add the Lock In tab');
+  await wait(2500);
+  await js(`document.getElementById('view').scrollTop = 0`);
+  await todos.add('Book flights home');
+  await todos.refresh(true);
+  pushState();
+  await nav('home');
+  await nav('todos');
+  await wait(900);
+  await shot(w, 'S3-list');
+  await js(`document.querySelector('.list-sheet')?.scrollIntoView({ block: 'start' })`);
+  await wait(300);
+  await shot(w, 'S4-connected');
+  // A crew that shares to-dos.
+  settings = { ...settings, quietStart: '00:00', quietEnd: '00:00', crew: { ...settings.crew, shareTodos: true } };
+  crew.create('Library gremlins', 'Ari');
+  await wait(900);
+  await nav('friends');
+  await wait(900);
+  await js(`document.querySelectorAll('.crew-todos')[1]?.setAttribute('open', '')`);
+  await js(`document.querySelectorAll('.crew-todos')[0]?.setAttribute('open', '')`);
+  await wait(200);
+  await shot(w, 'S5-friends');
+}
+
 /** LOCKIN_SMOKE=1: exercise every window and a session, then exit. Used in CI/dev checks. */
 async function smokeTest(): Promise<void> {
   const wait = (ms: number) => new Promise((r) => setTimeout(r, ms));
@@ -4331,6 +4452,12 @@ async function smokeTest(): Promise<void> {
   if (process.env.LOCKIN_LOOK) {
     await lookShots(wait, shot, nav);
     app.exit(0);
+    return;
+  }
+  if (process.env.LOCKIN_SHEET_FILE) {
+    await sheetShots(wait, shot, nav);
+    console.log('SMOKE sheet errors:', JSON.stringify(errors));
+    app.exit(errors.length ? 1 : 0);
     return;
   }
   if (shotsDir) {

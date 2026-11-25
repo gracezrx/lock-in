@@ -1,7 +1,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { codeSecret, crewKeys, formatCode, newCode, normalizeCode, open, seal } from '../src/main/crew/code';
-import { BOMB_FRESH_MS, BOMBS_PER_DAY, Crew, ONLINE_MS, clean, parseMsg, type BombOutcome, type CrewData, type LocalStatus } from '../src/main/crew/crew';
+import { BOMB_FRESH_MS, BOMBS_PER_DAY, Crew, ONLINE_MS, clean, packTodos, parseMsg, type BombOutcome, type CrewData, type LocalStatus } from '../src/main/crew/crew';
 import { relayUrls, type Relay, type RelayMessage } from '../src/main/crew/relay';
 import { DEFAULT_CREW } from '../src/shared/templates';
 import type { CrewSettings, CrewStats } from '../src/shared/types';
@@ -282,4 +282,40 @@ test('leaving tells the crew and forgets the code', async () => {
   assert.equal(grace.crew.view().members.length, 1);
   assert.ok(grace.crew.view().feed.some((f) => f.text === 'Sam left the crew.'));
   assert.deepEqual(grace.crew.join('nope', 'x').ok, false);
+});
+
+test('shared to-dos: a few short titles that always fit in one relay message', () => {
+  const t = packTodos(['a'.repeat(200), 'Problem set 4', ...Array.from({ length: 20 }, (_, i) => `Task ${i}`)], ['Sent the deck']);
+  assert.equal(t.open.length, 8);
+  assert.equal(t.open[0].length, 60);
+  assert.equal(t.openCount, 22);
+  assert.deepEqual(t.done, ['Sent the deck']);
+  const wide = packTodos(Array.from({ length: 8 }, () => '写'.repeat(80)), Array.from({ length: 12 }, () => '完'.repeat(80)));
+  assert.ok(Buffer.byteLength(JSON.stringify(wide)) <= 1800);
+  assert.equal(wide.openCount, 8);
+  assert.equal(wide.doneCount, 12);
+  const s = parseMsg({ v: 1, t: 'status', from: 'x', at: 1, state: 'free', todos: { open: ['ok', 7, 'x'.repeat(300)], done: 'nope', openCount: -3 } });
+  assert.deepEqual(s && 'todos' in s ? s.todos : null, { open: ['ok', 'x'.repeat(60)], done: [], openCount: 2, doneCount: 0 });
+});
+
+test('friends who share their to-dos: the crew sees the list, and the feed says when something gets done', async () => {
+  const { clock, people } = crewOf('Grace', 'Sam');
+  const [grace, sam] = people;
+  sam.settings.shareTodos = true;
+  sam.local.todos = packTodos(['Problem set 4', 'Email the TA'], ['Read chapter 3']);
+  await everyoneTicks(people);
+  const seen = grace.crew.view().members.find((m) => m.name === 'Sam')!;
+  assert.deepEqual(seen.todos, { open: ['Problem set 4', 'Email the TA'], done: ['Read chapter 3'], openCount: 2, doneCount: 1 });
+  // The first status only sets the baseline: no feed line for what was done before.
+  assert.ok(!grace.crew.view().feed.some((f) => f.kind === 'done'));
+  // Sam ticks one off: friends hear about it once it settles.
+  sam.local.todos = packTodos(['Email the TA'], ['Problem set 4', 'Read chapter 3']);
+  await everyoneTicks(people);
+  clock.now += 21_000;
+  await everyoneTicks(people);
+  const feed = grace.crew.view().feed.filter((f) => f.kind === 'done').map((f) => f.text);
+  assert.deepEqual(feed, ['Sam finished “Problem set 4”.']);
+  assert.deepEqual(grace.crew.view().members.find((m) => m.name === 'Sam')!.todos?.open, ['Email the TA']);
+  // Grace doesn't share hers: nothing about her list goes out.
+  assert.equal(sam.crew.view().members.find((m) => m.name === 'Grace')!.todos, undefined);
 });

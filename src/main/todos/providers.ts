@@ -88,6 +88,14 @@ export class BuiltinProvider implements TodoProvider {
   async remove(id: string): Promise<void> {
     this.save(this.load().filter((t) => t.id !== id));
   }
+
+  /** The open to-dos become these (finished ones are kept); used when you stop syncing to a sheet. */
+  async replaceOpen(open: Omit<Task, 'id' | 'completed'>[]): Promise<void> {
+    const all = this.load();
+    const kept = new Map(all.filter((t) => !t.completed).map((t) => [t.title.trim().toLowerCase(), t]));
+    const next: StoredTask[] = open.map((t) => kept.get(t.title.trim().toLowerCase()) ?? { ...t, id: randomUUID(), completed: false, createdAt: Date.now() });
+    this.save([...all.filter((t) => t.completed), ...next]);
+  }
 }
 
 // ---------------------------------------------------------------------------
