@@ -87,7 +87,10 @@ test('the same meeting from the Calendar app and a link shows once', () => {
 test('the calendar works with only the Calendar app turned on, and says why when macOS blocks it', async () => {
   const settings: CalendarSettings = { urls: [], mac: true, quietInMeetings: true, headsUpMin: 5, offerGaps: true, capSessions: true };
   let blocked = false;
-  const now = Date.now();
+  // Midday, so "later today" is today whatever time the tests run (Lock In's day starts at 4am).
+  const noon = new Date();
+  noon.setHours(12, 0, 0, 0);
+  const now = noon.getTime();
   const cal = new CalendarManager({
     settings: () => settings,
     log: () => undefined,

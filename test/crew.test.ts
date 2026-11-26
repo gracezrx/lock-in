@@ -29,7 +29,9 @@ test('messages are sealed: only the crew can read them, and tampering is caught'
   assert.ok(!sealed.includes('there'));
   assert.deepEqual(open(k.key, sealed), { hi: 'there' });
   assert.equal(open(other.key, sealed), null);
-  const flipped = sealed.slice(0, -3) + (sealed.endsWith('A') ? 'B' : 'A') + sealed.slice(-2);
+  // One character in the middle of the ciphertext, changed for sure (it used to sometimes "change" an A to an A).
+  const i = Math.floor(sealed.length / 2);
+  const flipped = sealed.slice(0, i) + (sealed[i] === 'A' ? 'B' : 'A') + sealed.slice(i + 1);
   assert.equal(open(k.key, flipped), null);
   assert.equal(open(k.key, 'not ours'), null);
 });
@@ -323,16 +325,26 @@ test('friends who share their to-dos: the crew sees the list, and the feed says 
 test("today's numbers: minutes locked in (the live session included), done counts, and a fresh start each day", async () => {
   const { clock, people } = crewOf('Grace', 'Sam');
   const [grace, sam] = people;
+  // 30 focused minutes today, 20 of them in the session going on now (stats hold it once).
   sam.local.state = 'locked';
   sam.local.sessionMin = 20;
-  sam.local.stats = { ...STATS, todayMin: 30, doneToday: 4, openTodos: 2 };
+  sam.local.stats = { ...STATS, todayMin: 50, doneToday: 4, openTodos: 2 };
   await everyoneTicks(people);
   const seen = () => grace.member(sam.crew.me);
-  assert.equal(seen().lockedToday, 50);
+  assert.equal(seen().lockedToday, 50, 'not 70: the running session counts once');
   assert.equal(seen().stats.doneToday, 4);
   assert.equal(seen().stats.openTodos, 2);
+  clock.now += 2 * 60_000;
+  assert.equal(seen().lockedToday, 52, 'the session keeps counting between updates');
+  // Locked in, Sam's numbers go out every 3 minutes, so friends never guess for long.
+  sam.local.stats = { ...sam.local.stats, todayMin: 52 };
+  clock.now += 61_000;
+  await everyoneTicks(people);
+  assert.equal(seen().stats.todayMin, 52);
+  assert.equal(seen().lockedToday, 52);
   clock.now += 10 * 60_000;
-  assert.equal(seen().lockedToday, 60, 'the session keeps counting between updates');
+  assert.equal(seen().lockedToday, 56, 'filled in for 4 minutes at most');
+  sam.local.stats = { ...sam.local.stats, todayMin: 60 };
   // Finishing something is news (once it settles), even without sharing titles.
   sam.local.stats = { ...sam.local.stats, doneToday: 5, openTodos: 1 };
   sam.local.state = 'free';
@@ -345,9 +357,9 @@ test("today's numbers: minutes locked in (the live session included), done count
   clock.now = new Date('2026-10-27T09:00:00').getTime();
   assert.equal(seen().lockedToday, 0);
   assert.equal(seen().stats.doneToday, 0);
-  // Mine: today's minutes plus the session going on.
+  // Mine: what my stats say (they hold the session going on, live).
   grace.local.state = 'locked';
   grace.local.sessionMin = 15;
-  grace.local.stats = { ...STATS, todayMin: 40 };
+  grace.local.stats = { ...STATS, todayMin: 55 };
   assert.equal(grace.crew.view().members[0].lockedToday, 55);
 });

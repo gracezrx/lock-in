@@ -38,6 +38,10 @@ export const ONLINE_MS = 25 * 60_000;
 /** A bomb that took longer than this to arrive (you were offline) doesn't go off. */
 export const BOMB_FRESH_MS = 2 * 60_000;
 const HEARTBEAT_MS = 10 * 60_000;
+/** While you're locked in, your minutes go out more often, so friends' numbers stay close. */
+const LOCKED_HEARTBEAT_MS = 3 * 60_000;
+/** Friends' minutes are filled in between updates for at most this long. */
+const LIVE_CAP_MIN = 4;
 /** Drifting and free must settle this long before friends hear about it (no flicker). */
 const SETTLE_MS = 20_000;
 
@@ -479,7 +483,7 @@ export class Crew {
     const local = this.d.local();
     // To-dos are news too, but they settle like drifting does (no flicker while you tick a few off).
     const sig = JSON.stringify([local.state, local.goal ?? '', local.distraction ?? '', local.todos ? [local.todos.open, local.todos.done] : null, local.stats.doneToday ?? null, local.stats.openTodos ?? null]);
-    let due = now - this.lastPublish > HEARTBEAT_MS;
+    let due = now - this.lastPublish > (local.state === 'locked' ? LOCKED_HEARTBEAT_MS : HEARTBEAT_MS);
     if (sig !== this.lastSig) {
       // Locking in (or out of) a session is news right away; drifting and free settle first.
       const was = this.lastSig ? (JSON.parse(this.lastSig) as unknown[])[0] : null;
@@ -521,7 +525,8 @@ export class Crew {
       sessionMin: local.sessionMin,
       stats: local.stats,
       todos: local.todos,
-      lockedToday: local.stats.todayMin + (local.state === 'locked' || local.state === 'break' ? local.sessionMin ?? 0 : 0),
+      // Your stats already hold the session going on now (focused minutes, live).
+      lockedToday: local.stats.todayMin,
       lastSeen: now,
       bombable: false,
     };
@@ -534,8 +539,9 @@ export class Crew {
       // Numbers from yesterday's last status don't count today.
       const stale = dayOf(sent) !== today;
       const stats = stale ? { ...m.stats, todayMin: 0, ...(m.stats.doneToday !== undefined ? { doneToday: 0 } : {}) } : m.stats;
-      // A session going on now: its minutes so far, ticking on between their updates.
-      const live = !stale && !offline && (m.state === 'locked' || m.state === 'break') && m.sessionMin !== undefined ? m.sessionMin + Math.max(0, Math.floor((now - sent) / 60_000)) : 0;
+      // Their minutes already hold the session going on as of their last update; while they're
+      // still locked in, the minutes since then count too (break time doesn't).
+      const live = !stale && !offline && m.state === 'locked' ? Math.min(LIVE_CAP_MIN, Math.max(0, Math.floor((now - sent) / 60_000))) : 0;
       return { ...rest, stats, me: false, state: offline ? 'offline' : m.state, since: offline ? m.lastSeen : m.since, lockedToday: Math.min(1440, stats.todayMin + live), bombable: this.bombable(m, now) };
     });
     others.sort((a, b) => order.indexOf(a.state) - order.indexOf(b.state) || a.name.localeCompare(b.name));

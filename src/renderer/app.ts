@@ -2143,7 +2143,8 @@ const QUIZ: QStep[] = [
     lede: 'Lock In cheers when you finish things, and has words when hours go by without one.',
     body: () => {
       const wrap = h('div', { class: 'onb' });
-      if (draft.todoProvider === 'builtin') {
+      // The Lock In list, kept here or in your spreadsheet: today's to-dos go in either way.
+      if (draft.todoProvider === 'builtin' || draft.todoProvider === 'sheet') {
         const list = h('div', { class: 'today-list' });
         const input = h('input', { type: 'text', placeholder: 'Add a to-do and press Enter', maxlength: 300, 'aria-label': 'Add a to-do for today' });
         const add = () => {
@@ -2186,9 +2187,15 @@ const QUIZ: QStep[] = [
       for (const id of order) {
         const p = TODO_PROVIDERS.find((x) => x.id === id);
         if (!p) continue;
-        where.append(h('button', { class: 'chip pick', type: 'button', title: p.help, 'aria-pressed': String(draft.todoProvider === id), onclick: () => { draft.todoProvider = id; drawQuiz(); } }, id === 'builtin' ? 'Here in Lock In' : p.label));
+        where.append(h('button', { class: 'chip pick', type: 'button', title: p.help, 'aria-pressed': String(draft.todoProvider === id), onclick: () => {
+          draft.todoProvider = id;
+          // A spreadsheet starts out with your own tab in it (a team sharing one sheet gets one each).
+          if (id === 'sheet' && draft.sheet.own === undefined) draft.sheet = { ...draft.sheet, own: true };
+          drawQuiz();
+        } }, id === 'builtin' ? 'Here in Lock In' : id === 'sheet' ? 'A spreadsheet' : p.label));
       }
-      wrap.append(h('p', { class: 'list-head', style: `margin-top:${draft.todoProvider === 'builtin' ? 32 : 0}px` }, draft.todoProvider === 'builtin' ? 'Already keep your to-dos somewhere else?' : 'Where your to-dos live'), where);
+      const listed = draft.todoProvider === 'builtin' || draft.todoProvider === 'sheet';
+      wrap.append(h('p', { class: 'list-head', style: `margin-top:${listed ? 32 : 0}px` }, draft.todoProvider === 'builtin' ? 'Already keep your to-dos somewhere else?' : 'Where your to-dos live'), where);
       if (draft.todoProvider === 'todoist') {
         const tok = h('input', { type: 'password', placeholder: 'Paste your Todoist API token', value: draft.todoistToken, autocomplete: 'off' });
         tok.addEventListener('input', () => (draft.todoistToken = tok.value.trim()));
@@ -2455,7 +2462,7 @@ async function finishQuiz(): Promise<void> {
     if (!draft.habits.has(x.id) || draft.hadGoals.has(`kind:${x.goal.kind}`)) continue;
     await api.invoke('goals:add', x.goal);
   }
-  if (draft.todoProvider === 'builtin' && draft.todayTodos.length) {
+  if ((draft.todoProvider === 'builtin' || draft.todoProvider === 'sheet') && draft.todayTodos.length) {
     await api.invoke('todos:refresh');
     const have = new Set((await api.invoke<{ open: Task[] }>('todos:get')).open.map((t) => t.title.trim().toLowerCase()));
     for (const t of draft.todayTodos) if (!have.has(t.trim().toLowerCase())) await api.invoke('todos:add', t);
@@ -2464,7 +2471,7 @@ async function finishQuiz(): Promise<void> {
   drawQuizDone({
     goals: bigs.length,
     habits: draft.habits.size,
-    todos: draft.todoProvider === 'builtin' ? draft.todayTodos.length : null,
+    todos: draft.todoProvider === 'builtin' || draft.todoProvider === 'sheet' ? draft.todayTodos.length : null,
     distractions: Object.keys(p.distractionApps).length + Object.keys(p.distractionDomains).length,
   });
 }
@@ -2913,7 +2920,7 @@ function describeMap(pv: SheetPreview): string {
 }
 
 /** What the Lock In tab looks like: a little spreadsheet, with your to-dos in it when there are some. */
-function templatePreview(titles: string[] = []): HTMLElement {
+function templatePreview(titles: string[] = [], tab = 'Lock In'): HTMLElement {
   const day = (plus: number) => new Date(Date.now() + plus * 86_400_000).toLocaleDateString(undefined, { month: 'short', day: 'numeric' });
   const examples: [boolean, string, string, string, string, string][] = [
     [true, 'Send the weekly update', day(0), 'High', 'Work', ''],
@@ -2953,7 +2960,7 @@ function templatePreview(titles: string[] = []): HTMLElement {
         ),
       ),
     ),
-    h('div', { class: 'tpl-tabs' }, h('span', null, 'Sheet1'), h('span', { class: 'on' }, 'Lock In')),
+    h('div', { class: 'tpl-tabs' }, h('span', null, 'Sheet1'), h('span', { class: 'on' }, tab)),
   );
 }
 
@@ -2970,6 +2977,16 @@ function sheetSetup(initial: SheetSettings, onChange: (c: SheetSettings) => void
   let seq = 0;
   let connecting = false;
   let connectError = '';
+  // Your own tab's name ("Lock In · Grace"), so a team sharing one sheet each gets their own.
+  let ownTab = initial.own && initial.tab.trim() ? initial.tab.trim() : 'Lock In';
+  void api.invoke<string>('todos:ownTab').then((n) => {
+    if (!n) return;
+    // A tab made by an earlier version is just "Lock In": it keeps its name.
+    if (c.own && !c.tab.trim() && !opts.connect && !compact) return draw();
+    ownTab = c.own && c.tab.trim() ? c.tab.trim() : n;
+    if (c.own && !c.tab.trim()) set({ tab: n }, false);
+    else draw();
+  });
 
   const set = (patch: Partial<SheetSettings>, recheck = true) => {
     c = { ...c, ...patch };
@@ -3016,6 +3033,7 @@ function sheetSetup(initial: SheetSettings, onChange: (c: SheetSettings) => void
         h('li', null, 'Click Deploy, then New deployment. Choose Web app, set "Execute as" to Me and "Who has access" to Anyone, then Deploy and allow access.'),
         h('li', null, 'Copy the Web app URL (it ends in /exec) and paste it into the box above instead of the sheet link.'),
       ),
+      h('p', { class: 'muted' }, h('b', null, 'Your team shares this sheet? '), 'Only one person does the steps above. Everyone else pastes the team link that person copies from Lock In (it ends in /exec?token=…), and each of you gets your own tab.'),
       h('p', { class: 'muted' }, 'Set it up before? Paste the new script over the old one, then choose Deploy, Manage deployments, the pencil, New version, Deploy. The link stays the same.'),
     );
   };
@@ -3058,24 +3076,24 @@ function sheetSetup(initial: SheetSettings, onChange: (c: SheetSettings) => void
       } }, c.path ? 'Choose a different file' : 'Choose file');
       const make = h('button', { class: 'btn btn-small btn-quiet', type: 'button', title: 'An Excel file with just the Lock In tab. Opens in Excel, Numbers or Google Sheets.', onclick: async () => {
         const path = await api.invoke<string | null>('todos:newSheetFile');
-        if (path) set({ path, own: true, tab: '' });
+        if (path) set({ path, own: true, tab: ownTab });
       } }, 'Make a new one');
       box.append(h('div', { class: 'add-row' }, pick, make, c.path ? h('span', { class: 'file-path', title: c.path }, c.path.split('/').pop() ?? c.path) : h('span', { class: 'muted' }, 'No file chosen')));
     }
 
     // Which tab: Lock In's own (made from the template), or one of yours.
     const csv = c.kind === 'file' && /\.(csv|tsv|txt)$/i.test(c.path);
-    const tabs = (lastPreview?.tabs ?? []).filter((x) => x.toLowerCase() !== 'lock in');
+    const tabs = (lastPreview?.tabs ?? []).filter((x) => x.toLowerCase() !== ownTab.toLowerCase() && !(c.own && x.toLowerCase() === c.tab.trim().toLowerCase()));
     const cur = c.own ? '__own' : tabs.find((x) => x.toLowerCase() === c.tab.trim().toLowerCase()) ?? (c.tab.trim() ? c.tab.trim() : '');
     const sel = h(
       'select',
       { 'aria-label': 'Tab' },
-      h('option', { value: '__own', selected: cur === '__own' }, csv ? 'Lock In’s columns (the template)' : 'A new “Lock In” tab (recommended)'),
+      h('option', { value: '__own', selected: cur === '__own' }, csv ? 'Lock In’s columns (the template)' : `Your own tab, “${c.own && c.tab.trim() ? c.tab.trim() : ownTab}” (recommended)`),
       h('option', { value: '', selected: cur === '' }, csv ? 'Read the file as it is' : 'One of my tabs: pick the right one for me'),
       cur && cur !== '__own' && !tabs.includes(cur) ? h('option', { value: cur, selected: true }, `${cur}${tabs.length ? ' (not found)' : ''}`) : null,
       csv ? null : tabs.map((x) => h('option', { value: x, selected: cur === x }, `My tab: ${x}`)),
     );
-    sel.addEventListener('change', () => set(sel.value === '__own' ? { own: true, tab: '' } : { own: false, tab: sel.value }));
+    sel.addEventListener('change', () => set(sel.value === '__own' ? { own: true, tab: ownTab } : { own: false, tab: sel.value }));
     const row = h('div', { class: 'add-row tab-row' }, h('label', null, csv ? 'Use' : 'Tab'), sel);
     if (!csv && !c.own && !tabs.length) {
       const inp = h('input', { type: 'text', value: c.tab, placeholder: 'Or type a tab name', 'aria-label': 'Tab name' });
@@ -3091,8 +3109,8 @@ function sheetSetup(initial: SheetSettings, onChange: (c: SheetSettings) => void
       if (pv.error) status.append(h('p', { class: 'sheet-error', role: 'alert' }, pv.error));
       if (pv.ok && pv.willCreate) {
         status.append(
-          h('p', { class: 'sheet-found' }, h('b', null, csv ? 'Lock In will set this file up as your list' : 'Lock In will add a “Lock In” tab'), pv.seed ? ` with your ${pv.seed} open ${pv.seed === 1 ? 'to-do' : 'to-dos'}` : '', '. Your other tabs stay exactly as they are.'),
-          templatePreview(pv.sample),
+          h('p', { class: 'sheet-found' }, h('b', null, csv ? 'Lock In will set this file up as your list' : `Lock In will add a tab called “${pv.tab || ownTab}”`), pv.seed ? ` with your ${pv.seed} open ${pv.seed === 1 ? 'to-do' : 'to-dos'}` : '', '. Your other tabs stay exactly as they are.'),
+          templatePreview(pv.sample, pv.tab || ownTab),
         );
       } else if (pv.ok) {
         const where = pv.tab ? ` in the "${pv.tab}" tab` : '';
@@ -3153,7 +3171,7 @@ function sheetSetup(initial: SheetSettings, onChange: (c: SheetSettings) => void
       }
     }
     if (opts.connect && (c.url.trim() || c.path.trim())) {
-      const go = h('button', { class: 'btn btn-primary', type: 'button', disabled: connecting || !pv?.ok, onclick: () => void connect() }, connecting ? 'Connecting…' : pv?.willCreate ? (csv ? 'Set it up' : 'Add the Lock In tab') : 'Use this sheet');
+      const go = h('button', { class: 'btn btn-primary', type: 'button', disabled: connecting || !pv?.ok, onclick: () => void connect() }, connecting ? 'Connecting…' : pv?.willCreate ? (csv ? 'Set it up' : 'Add my tab') : 'Use this sheet');
       box.append(h('div', { class: 'sheet-go' }, go, connectError ? h('span', { class: 'sheet-error', role: 'alert' }, connectError) : null));
     }
     const needsConnector = c.kind === 'google' && !/\/exec\b/.test(c.url) && (!compact || c.own || /private|connector/i.test(pv?.error ?? ''));
@@ -3172,6 +3190,16 @@ function listSheetSection(st: Settings): HTMLElement {
     const c = st.todo.sheet;
     const where = c.kind === 'file' ? c.path.split('/').pop() ?? c.path : 'your Google Sheet';
     const open = h('button', { class: 'btn btn-small', type: 'button', onclick: () => void api.invoke('todos:openSheet') }, 'Open it');
+    // A Google Sheet through the connector: one link for the whole team (it carries the secret).
+    const teamNote = h('span', { class: 'saved' });
+    const team = /script\.google/.test(c.url)
+      ? h('button', { class: 'btn btn-small', type: 'button', title: 'Teammates paste this link in their Lock In and each get their own tab in this sheet. It lets them read and write the sheet, so share it only with your team.', onclick: async () => {
+          const link = await api.invoke<string | null>('todos:teamLink');
+          if (!link) return;
+          await api.invoke('clipboard:write', link);
+          teamNote.textContent = 'Team link copied. Share it only with your team.';
+        } }, 'Copy link for your team')
+      : null;
     const stop = h('button', { class: 'btn btn-small btn-quiet', type: 'button' }, 'Stop using it');
     stop.addEventListener('click', async () => {
       if (stop.dataset.sure !== '1') {
@@ -3205,10 +3233,11 @@ function listSheetSection(st: Settings): HTMLElement {
         h(
           'div',
           { class: 'sheet-linked-text' },
-          h('b', null, c.own ? `Synced with the “Lock In” tab in ${where}` : `Synced with ${c.tab.trim() ? `the “${c.tab.trim()}” tab in ` : ''}${where}`),
-          h('span', { class: 'muted' }, 'Add or tick a to-do here and it lands in the sheet; add a row there and it shows up here.'),
+          h('b', null, c.own ? `Synced with the “${c.tab.trim() || 'Lock In'}” tab in ${where}` : `Synced with ${c.tab.trim() ? `the “${c.tab.trim()}” tab in ` : ''}${where}`),
+          h('span', { class: 'muted' }, 'Add or tick a to-do here and it lands in the sheet; add a row there and it shows up here. Things you tell the coach you did go in as ticked rows.'),
+          teamNote,
         ),
-        h('div', { class: 'sheet-linked-act' }, open, stop),
+        h('div', { class: 'sheet-linked-act' }, team, open, stop),
       ),
       adjust,
     );
@@ -3221,7 +3250,7 @@ function listSheetSection(st: Settings): HTMLElement {
   start.addEventListener('click', () => {
     start.hidden = true;
     example.hidden = true; // the setup shows the tab with your own to-dos instead
-    let draft: SheetSettings = { ...st.todo.sheet, own: true, tab: '' };
+    let draft: SheetSettings = { ...st.todo.sheet, own: true, tab: '' }; // named for you once Lock In knows your name
     body.append(sheetSetup(draft, (next) => (draft = next), false, { connect: async () => {
       settings = await api.invoke<Settings>('settings:get');
       void renderTodos();

@@ -11,7 +11,7 @@ import { bestMatch, splitDone } from './match';
 import { BuiltinProvider, RemindersProvider, ThingsProvider, TodoistProvider, rankTasks, type TodoProvider } from './providers';
 import { SheetProvider, appsScript, canWrite, sheetMode, type TrackState } from './sheet';
 import { localDate } from './day';
-import type { TemplateRow } from './template';
+import { ownTabName, type TemplateRow } from './template';
 import { TodoWatchdog, type WatchEvent, type WatchState } from './watchdog';
 
 const REFRESH_MS = 120_000;
@@ -108,6 +108,16 @@ export class TodoManager {
     this.backup(path);
   }
 
+  /** Your own tab's name in a spreadsheet: "Lock In · Grace" (your crew name, else your Mac's). */
+  ownTab(): string {
+    return ownTabName(this.settings().crew.name || this.firstName || this.me[this.me.length - 1] || '');
+  }
+
+  /** Lock In's own tab, named for you when it has no name yet. */
+  private named(c: SheetSettings): SheetSettings {
+    return c.own && !c.tab.trim() && sheetMode(c) !== 'csv' ? { ...c, tab: this.ownTab() } : c;
+  }
+
   /** Your open Lock In to-dos, as rows for a new Lock In tab. */
   builtinOpen(): TemplateRow[] {
     return this.store
@@ -117,7 +127,8 @@ export class TodoManager {
   }
 
   /** Setup screen: read a sheet with the given (unsaved) settings and report what was found. */
-  async previewSheet(c: SheetSettings): Promise<SheetPreview> {
+  async previewSheet(raw: SheetSettings): Promise<SheetPreview> {
+    const c = this.named(raw);
     return new SheetProvider({ cfg: () => c, loadState: () => null, saveState: () => undefined, me: () => this.me, seed: () => this.builtinOpen() }).preview();
   }
 
@@ -125,14 +136,15 @@ export class TodoManager {
    * Connects a spreadsheet to your list: adds Lock In's tab (with your open to-dos) when that's
    * what you picked, then reports what's there. The caller saves the settings when it's ok.
    */
-  async connectSheet(c: SheetSettings): Promise<SheetPreview> {
+  async connectSheet(raw: SheetSettings): Promise<{ preview: SheetPreview; sheet: SheetSettings }> {
+    const c = this.named(raw);
     const p = this.sheetProvider(() => c);
     try {
       await p.ensureOwnTab();
     } catch (e) {
-      return { ...(await p.preview()), ok: false, error: (e as Error).message };
+      return { preview: { ...(await p.preview()), ok: false, error: (e as Error).message }, sheet: c };
     }
-    return p.preview();
+    return { preview: await p.preview(), sheet: c };
   }
 
   /**
@@ -290,6 +302,7 @@ export class TodoManager {
     const open = this.watchdog.openTasks;
     const doneNow = this.doneToday();
     const canTick = this.current()?.canComplete !== false;
+    let sheetAdds = 0;
     for (const raw of items) {
       const item = raw[0].toUpperCase() + raw.slice(1);
       // Already ticked off today: nothing to add twice.
@@ -310,10 +323,17 @@ export class TodoManager {
           continue;
         }
       }
+      // Your list is a spreadsheet: what you did goes in it too, as a ticked row.
+      if (this.provider instanceof SheetProvider) {
+        if (await this.provider.addDone(item)) sheetAdds++;
+        added.push(item);
+        continue;
+      }
       const dupe = this.extrasToday().some((e) => e.title.toLowerCase() === item.toLowerCase());
       if (!dupe) this.doneLog.add({ at: Date.now(), title: item, source: via, list: 'Told Lock In' });
       added.push(item);
     }
+    if (sheetAdds) await this.refresh(true);
     if (ticked.length || added.length) {
       this.watchdog.progress(this.settings().todo);
       this.persist(true);

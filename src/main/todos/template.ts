@@ -4,6 +4,15 @@
 import type { Cell } from './sheet';
 
 export const TEMPLATE_TAB = 'Lock In';
+
+/**
+ * Your own tab's name: "Lock In · Grace", so a team sharing one spreadsheet each gets a tab.
+ * Kept to what Excel allows (31 characters, none of : \\ / ? * [ ]).
+ */
+export function ownTabName(name: string): string {
+  const n = name.replace(/[:\\/?*[\]]/g, ' ').replace(/\s+/g, ' ').trim();
+  return n ? `${TEMPLATE_TAB} · ${n}`.slice(0, 31).trim() : TEMPLATE_TAB;
+}
 export const TEMPLATE_HEADERS = ['Done', 'Task', 'Due', 'Priority', 'Project', 'Notes', 'Added'] as const;
 
 /** Column numbers in the template (0 = A). */

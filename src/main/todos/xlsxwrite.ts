@@ -211,10 +211,10 @@ function addSheetPart(f: Files, name: string, xml: string): void {
 }
 
 /** The workbook with Lock In's tab added (filled with `rows`). `created` is false when it was already there. */
-export function addTemplateTab(buf: Uint8Array, rows: TemplateRow[], doneValue: Cell = 'Done'): { buf: Uint8Array; created: boolean } {
+export function addTemplateTab(buf: Uint8Array, rows: TemplateRow[], doneValue: Cell = 'Done', name: string = TEMPLATE_TAB): { buf: Uint8Array; created: boolean } {
   const f = read(buf);
   const order = Object.keys(f);
-  if (sheets(f).some((s) => s.name.toLowerCase() === TEMPLATE_TAB.toLowerCase())) return { buf, created: false };
+  if (sheets(f).some((s) => s.name.toLowerCase() === name.toLowerCase())) return { buf, created: false };
   if (!f['xl/styles.xml']) {
     put(f, 'xl/styles.xml', MIN_STYLES);
     let rels = text(f, 'xl/_rels/workbook.xml.rels');
@@ -224,12 +224,12 @@ export function addTemplateTab(buf: Uint8Array, rows: TemplateRow[], doneValue: 
     put(f, '[Content_Types].xml', ct.replace(/<\/Types>\s*$/, '<Override PartName="/xl/styles.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.styles+xml"/></Types>'));
   }
   const st = templateStyles(f);
-  addSheetPart(f, TEMPLATE_TAB, templateSheet(rows, st, doneValue));
+  addSheetPart(f, name, templateSheet(rows, st, doneValue));
   return { buf: write(f, order), created: true };
 }
 
 /** A new workbook that is just Lock In's tab. */
-export function newTemplateWorkbook(rows: TemplateRow[]): Uint8Array {
+export function newTemplateWorkbook(rows: TemplateRow[], name: string = TEMPLATE_TAB): Uint8Array {
   const f: Files = {};
   put(f, '[Content_Types].xml', `${HEAD}<Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types"><Default Extension="rels" ContentType="application/vnd.openxmlformats-package.relationships+xml"/><Default Extension="xml" ContentType="application/xml"/><Override PartName="/xl/workbook.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet.main+xml"/><Override PartName="/xl/styles.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.styles+xml"/></Types>`);
   put(f, '_rels/.rels', `${HEAD}<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships"><Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/officeDocument" Target="xl/workbook.xml"/></Relationships>`);
@@ -237,7 +237,7 @@ export function newTemplateWorkbook(rows: TemplateRow[]): Uint8Array {
   put(f, 'xl/_rels/workbook.xml.rels', `${HEAD}<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships"><Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/styles" Target="styles.xml"/></Relationships>`);
   put(f, 'xl/styles.xml', MIN_STYLES);
   const st = templateStyles(f);
-  addSheetPart(f, TEMPLATE_TAB, templateSheet(rows, st, 'Done'));
+  addSheetPart(f, name, templateSheet(rows, st, 'Done'));
   return write(f, ['[Content_Types].xml', '_rels/.rels', 'xl/workbook.xml', 'xl/_rels/workbook.xml.rels', 'xl/styles.xml']);
 }
 

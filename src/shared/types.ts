@@ -659,7 +659,7 @@ export interface CrewMemberView {
   stats: CrewStats;
   /** Their to-dos, when they share them. */
   todos?: CrewTodos;
-  /** Minutes locked in today, the session going on now included. */
+  /** Focused minutes locked in today, the session going on now included (counted once). */
   lockedToday: number;
   lastSeen: number;
   /** You can throw a bomb at them right now. */

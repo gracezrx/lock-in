@@ -736,11 +736,11 @@ export async function numbersTabs(path: string): Promise<string[]> {
 }
 
 /** Adds Lock In's tab to a Numbers file. False when it was already there. */
-export async function numbersAddTab(path: string, rows: TemplateRow[]): Promise<boolean> {
+export async function numbersAddTab(path: string, rows: TemplateRow[], name: string = TEMPLATE_TAB): Promise<boolean> {
   const cells = rows.map((r) => templateCells(r, true).map((v, i) => (i === TCOL.done && v === '' ? false : v)));
   const out = await jxa(`${NUMBERS_OPEN(path)}
     ${JS_VAL}
-    const TAB = ${JSON.stringify(TEMPLATE_TAB)}, H = ${JSON.stringify(TEMPLATE_HEADERS)}, ROWS = ${JSON.stringify(cells)};
+    const TAB = ${JSON.stringify(name)}, H = ${JSON.stringify(TEMPLATE_HEADERS)}, ROWS = ${JSON.stringify(cells)};
     let result = 'exists';
     if (!doc.sheets.name().some((n) => n.toLowerCase() === TAB.toLowerCase())) {
       doc.sheets.push(app.Sheet({ name: TAB }));
@@ -1005,10 +1005,20 @@ export class SheetProvider implements TodoProvider {
 
   constructor(private d: SheetDeps) {}
 
-  /** The settings, with Lock In's own tab filled in. */
+  /** The settings, with Lock In's own tab filled in ("Lock In · Grace"; plain "Lock In" from before). */
   private get c(): SheetSettings {
     const c = this.d.cfg();
-    return c.own && sheetMode(c) !== 'csv' ? { ...c, tab: TEMPLATE_TAB } : c;
+    if (sheetMode(c) === 'csv' || !c.own) return c;
+    return { ...c, tab: c.tab.trim() || TEMPLATE_TAB };
+  }
+
+  /** The connector's secret: from a team link (…/exec?token=…), else this Mac's own. */
+  private get token(): string {
+    try {
+      return new URL(this.d.cfg().url.trim()).searchParams.get('token') || this.d.cfg().token;
+    } catch {
+      return this.d.cfg().token;
+    }
   }
 
   private get mode(): Mode {
@@ -1104,7 +1114,7 @@ export class SheetProvider implements TodoProvider {
   private async script(params: Record<string, string>): Promise<{ values?: Table; error?: string; tabs?: string[]; tab?: string; version?: number }> {
     const c = this.c;
     const u = new URL(c.url.trim());
-    u.searchParams.set('token', c.token);
+    u.searchParams.set('token', this.token);
     for (const [k, v] of Object.entries(params)) if (v) u.searchParams.set(k, v);
     const res = await this.http(u, { redirect: 'follow', signal: AbortSignal.timeout(15_000) });
     const text = await res.text();
@@ -1121,7 +1131,7 @@ export class SheetProvider implements TodoProvider {
       method: 'POST',
       redirect: 'follow',
       headers: { 'Content-Type': 'text/plain' },
-      body: JSON.stringify({ token: c.token, tab: c.tab.trim(), ...body }),
+      body: JSON.stringify({ token: this.token, tab: c.tab.trim(), ...body }),
       signal: AbortSignal.timeout(20_000),
     });
     const j = (await res.json().catch(() => ({}))) as { ok?: boolean; created?: boolean; error?: string };
@@ -1203,13 +1213,14 @@ export class SheetProvider implements TodoProvider {
   /** Whether Lock In's tab is in the sheet already (without changing anything). */
   private async hasOwnTab(): Promise<boolean> {
     const c = this.c;
+    const mine = (t: string) => t.toLowerCase() === c.tab.toLowerCase();
     switch (this.mode) {
       case 'xlsx':
-        return readXlsxBook(new Uint8Array(readFileSync(c.path))).tabs.some((t) => t.toLowerCase() === TEMPLATE_TAB.toLowerCase());
+        return readXlsxBook(new Uint8Array(readFileSync(c.path))).tabs.some(mine);
       case 'numbers':
-        return (await numbersTabs(c.path)).some((t) => t.toLowerCase() === TEMPLATE_TAB.toLowerCase());
+        return (await numbersTabs(c.path)).some(mine);
       case 'script': {
-        const j = await this.script({ tab: TEMPLATE_TAB });
+        const j = await this.script({ tab: c.tab });
         if (j.error === 'Wrong secret') throw new Error('The connector has a different secret. Copy the script from Lock In again.');
         if (!j.error) return true;
         if (j.error === 'No tab with that name' && !j.version) throw new Error(OLD_CONNECTOR);
@@ -1237,7 +1248,7 @@ export class SheetProvider implements TodoProvider {
     switch (this.mode) {
       case 'xlsx': {
         if (openInExcel(c.path)) throw new Error(`Close ${basename(c.path)} in Excel, then Lock In can add its tab.`);
-        const out = addTemplateTab(new Uint8Array(readFileSync(c.path)), seed);
+        const out = addTemplateTab(new Uint8Array(readFileSync(c.path)), seed, 'Done', c.tab);
         if (out.created) {
           this.keepCopy(c.path);
           replaceFile(c.path, out.buf);
@@ -1251,10 +1262,10 @@ export class SheetProvider implements TodoProvider {
         created = true;
         break;
       case 'numbers':
-        created = await numbersAddTab(c.path, seed);
+        created = await numbersAddTab(c.path, seed, c.tab);
         break;
       case 'script':
-        created = !!(await this.post({ action: 'setup', tab: TEMPLATE_TAB, rows: seed.map((r) => templateCells(r, true).map((v, i) => (i === TCOL.done && v === '' ? false : v))) }, 'add its tab')).created;
+        created = !!(await this.post({ action: 'setup', tab: c.tab, rows: seed.map((r) => templateCells(r, true).map((v, i) => (i === TCOL.done && v === '' ? false : v))) }, 'add its tab')).created;
         break;
     }
     this.tabReady = true;
@@ -1453,12 +1464,22 @@ export class SheetProvider implements TodoProvider {
   }
 
   async add(title: string): Promise<boolean> {
+    return this.hold(title, false);
+  }
+
+  /** Something you did that wasn't on the list (told the coach): a ticked row in the sheet. */
+  async addDone(title: string): Promise<boolean> {
+    return this.hold(title, true);
+  }
+
+  /** Held in Lock In until the next read writes it into the sheet. */
+  private hold(title: string, done: boolean): boolean {
     const t = title.trim();
     if (!t) return false;
     const now = this.now();
     const st = this.stateNow(now);
     const seen = this.rows.filter((r) => norm(r.title) === norm(t)).length;
-    st.pending = [...(st.pending ?? []), { id: `new:${randomUUID()}`, title: t, at: now, seen }];
+    st.pending = [...(st.pending ?? []), { id: `new:${randomUUID()}`, title: t, at: now, seen, ...(done ? { done: now } : {}) }];
     this.d.saveState(st);
     return true;
   }
@@ -1496,7 +1517,7 @@ export class SheetProvider implements TodoProvider {
           /* only for the tab list */
         }
         const seed = this.seedRows();
-        return { ...empty, ok: true, canComplete: true, canAdd: true, tab: TEMPLATE_TAB, tabs, willCreate: true, seed: seed.length, sample: seed.slice(0, 5).map((r) => r.title), open: seed.length };
+        return { ...empty, ok: true, canComplete: true, canAdd: true, tab: this.c.tab, tabs, willCreate: true, seed: seed.length, sample: seed.slice(0, 5).map((r) => r.title), open: seed.length };
       }
       l = await this.load(true, true);
       const a = this.analyze(l, Date.now());

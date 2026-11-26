@@ -8,7 +8,7 @@ import type { AttentionView, Goal, GoalQuestion, GoalSuggestion, GoalsView, Pane
 import { appUsage } from './apps';
 import { CalendarManager, fetchIcs } from './calendar';
 import { MacCalendar, defaultExcluded, macStatusMessage } from './maccal';
-import { Crew, packTodos, type BombOutcome, type CrewData, type LocalStatus } from './crew/crew';
+import { Crew, dayOf, packTodos, type BombOutcome, type CrewData, type LocalStatus } from './crew/crew';
 import { NtfyRelay, type Relay } from './crew/relay';
 import { TodoHistory } from './todos/history';
 import { makeBackup, prune as pruneBackups, readBackup, restore as restoreBackup } from './backup';
@@ -30,7 +30,7 @@ import { Announcer } from './coach/announcer';
 import { Notifier, type NotifyPayload } from './notify';
 import { RoutineScheduler, type RoutineState } from './routines';
 import { TodoManager } from './todos/manager';
-import { googleSheetId } from './todos/sheet';
+import { googleSheetId, isScriptUrl } from './todos/sheet';
 import { newTemplateWorkbook } from './todos/xlsxwrite';
 import { Coach } from './coach/coach';
 import { Claude, coachSystem, makeLabeler } from './coach/llm';
@@ -456,7 +456,7 @@ function weekView(): WeekDay[] {
 
 let unlocked: Record<string, number> | null = null;
 let lastAchievementCheck = 0;
-let statsCache: { at: number; stats: CrewStatsT } | null = null;
+let statsCache: { at: number; stats: CrewStatsT; without: string } | null = null;
 let stateSince: { state: string; at: number } = { state: '', at: Date.now() };
 type CrewStatsT = LocalStatus['stats'];
 
@@ -476,10 +476,18 @@ function achievementCtx(now: number): AchievementCtx {
 }
 
 function myStats(now: number, fresh = false): CrewStatsT {
-  if (!fresh && statsCache && now - statsCache.at < 60_000) return statsCache.stats;
-  const stats = crewStats(achievementCtx(now), Object.keys(unlocked ?? {}).length);
-  statsCache = { at: now, stats };
-  return stats;
+  // The session going on now is logged once a minute; it's left out of the cached numbers and
+  // added live below, so it's counted once and to the second.
+  const running = sess?.record;
+  if (fresh || !statsCache || now - statsCache.at >= 60_000 || statsCache.without !== (running?.id ?? '')) {
+    const ctx = achievementCtx(now);
+    const base = crewStats({ ...ctx, sessions: ctx.sessions.filter((x) => x.id !== running?.id) }, Object.keys(unlocked ?? {}).length);
+    statsCache = { at: now, stats: base, without: running?.id ?? '' };
+  }
+  const stats = statsCache.stats;
+  if (!running) return stats;
+  const live = Math.floor(running.focusSec / 60);
+  return { ...stats, todayMin: stats.todayMin + (dayOf(running.startedAt) === dayOf(now) ? live : 0), weekMin: stats.weekMin + live };
 }
 
 /** What friends see about you right now. */
@@ -489,7 +497,8 @@ function crewLocal(): LocalStatus {
   let state: LocalStatus['state'];
   if (sess) state = sess.onBreakUntil ? 'break' : 'locked';
   else if (current?.inCall || (settings.calendar.quietInMeetings && calendar?.now(now))) state = 'meeting';
-  else if (idle >= 300 || !current) state = 'away';
+  // (The two-app crew test runs with no windows to watch: there, you count as at your desk.)
+  else if (idle >= 300 || !current) state = SMOKE && process.env.LOCKIN_CREW_E2E ? 'free' : 'away';
   else if (current.label === 'distraction') state = 'drifting';
   else state = 'free';
   if (stateSince.state !== state) stateSince = { state, at: sess && (state === 'locked' || state === 'break') ? sess.record.startedAt : now };
@@ -2555,8 +2564,7 @@ function setupIpc(): void {
   });
   // Your list in a spreadsheet: connect (adding Lock In's tab), stop, make a new one, open it.
   handle('todos:sheetConnect', async (_e, c: SheetSettings) => {
-    const sheet = withToken(c);
-    const pv = await todos.connectSheet(sheet);
+    const { preview: pv, sheet } = await todos.connectSheet(withToken(c));
     if (pv.ok) {
       settings = { ...settings, todo: { ...settings.todo, provider: 'sheet', sheet } };
       store.saveSettings(settings);
@@ -2583,8 +2591,21 @@ function setupIpc(): void {
     const r = windows.main ? await dialog.showSaveDialog(windows.main, opts) : await dialog.showSaveDialog(opts);
     if (r.canceled || !r.filePath) return null;
     const path = r.filePath.toLowerCase().endsWith('.xlsx') ? r.filePath : `${r.filePath}.xlsx`;
-    writeFileSync(path, newTemplateWorkbook(todos.builtinOpen()));
+    writeFileSync(path, newTemplateWorkbook(todos.builtinOpen(), todos.ownTab()));
     return path;
+  });
+  handle('todos:ownTab', () => todos.ownTab());
+  // The connector link with its secret, for teammates sharing the same Google Sheet.
+  handle('todos:teamLink', () => {
+    const c = settings.todo.sheet;
+    if (!isScriptUrl(c.url)) return null;
+    try {
+      const u = new URL(c.url.trim());
+      if (!u.searchParams.get('token')) u.searchParams.set('token', c.token);
+      return u.toString();
+    } catch {
+      return null;
+    }
   });
   handle('todos:openSheet', async () => {
     const c = settings.todo.sheet;
@@ -3046,7 +3067,8 @@ async function boot(): Promise<void> {
   });
   unlocked = store.readJson<Record<string, number> | null>('achievements.json', null);
   crewRelay = new NtfyRelay({
-    server: () => settings.crew.server || 'https://ntfy.sh',
+    // LOCKIN_RELAY (tests only): a relay on this machine (scripts/demo/crew-relay.mjs).
+    server: () => (SMOKE && process.env.LOCKIN_RELAY) || settings.crew.server || 'https://ntfy.sh',
     onMessage: (m) => crew.receive(m),
     onState: (on, error) => crew.setConnection(on, error),
     log,
@@ -3057,7 +3079,7 @@ async function boot(): Promise<void> {
       settings = { ...settings, crew: { ...settings.crew, ...patch } };
       store.saveSettings(settings);
     },
-    relay: SMOKE ? smokeCrewRelay() : crewRelay,
+    relay: SMOKE && !process.env.LOCKIN_RELAY ? smokeCrewRelay() : crewRelay,
     load: () => store.readJson<CrewData | null>('crew.json', null),
     save: (d) => store.writeJson('crew.json', d),
     local: crewLocal,
@@ -4358,6 +4380,103 @@ async function lookShots(
 }
 
 /**
+ * LOCKIN_CREW_E2E=host|guest (with LOCKIN_SMOKE, LOCKIN_RELAY and LOCKIN_E2E_DIR): two copies of
+ * Lock In in one crew over a real relay (scripts/demo/crew-e2e.sh). The host makes the crew and
+ * locks in; the guest joins with the code, sees the host's minutes, can't bomb them while they're
+ * locked in, then bombs them once they stop; the host's distractions lock for five minutes.
+ */
+async function crewE2E(
+  role: 'host' | 'guest',
+  wait: (ms: number) => Promise<unknown>,
+  shot: (win: Electron.BrowserWindow | null, name: string) => Promise<void>,
+  nav: (r: string) => Promise<void>,
+): Promise<boolean> {
+  const dir = process.env.LOCKIN_E2E_DIR!;
+  const say = (m: string) => console.log(`E2E ${role} ${new Date().toISOString().slice(11, 19)} ${m}`);
+  const mark = (name: string, data: unknown = {}) => writeFileSync(join(dir, `${role}-${name}.json`), JSON.stringify(data, null, 2));
+  const marked = (who: string, name: string) => existsSync(join(dir, `${who}-${name}.json`));
+  const until = async (what: string, cond: () => boolean, ms = 90_000) => {
+    const t0 = Date.now();
+    while (!cond()) {
+      if (Date.now() - t0 > ms) throw new Error(`timed out waiting for ${what}`);
+      await wait(250);
+    }
+    say(`ok: ${what}`);
+  };
+  if (!profile) {
+    profile = buildDefaultProfile('founder');
+    store.saveProfile(profile);
+  }
+  settings = { ...settings, quietStart: '00:00', quietEnd: '00:00', crew: { ...settings.crew, shareTodos: true, bombsFullScreen: true, bombsLockout: true } };
+  store.saveSettings(settings);
+  windows.main?.reload();
+  await wait(1800);
+  const view = () => crew.view();
+  const other = () => view().members.find((m) => !m.me);
+  const result: Record<string, unknown> = {};
+
+  if (role === 'host') {
+    await todos.add('Send the investor update');
+    crew.create('Launch crew', 'Grace');
+    await until('connected to the relay', () => view().connected);
+    writeFileSync(join(dir, 'code.txt'), settings.crew.code);
+    await until('Sam joined', () => other()?.name === 'Sam' && other()!.state !== 'offline');
+    startSession('Investor update', 25);
+    mark('locked', { at: Date.now() });
+    await until('the guest tried to bomb me while locked in', () => marked('guest', 'blocked'), 150_000);
+    result.mineWhileLocked = view().members.find((m) => m.me)?.lockedToday;
+    result.focusSec = sess?.record.focusSec;
+    endSession('user');
+    mark('free', { at: Date.now() });
+    await until('a bomb landed', () => !!lockout.state, 120_000);
+    result.lockout = { from: lockout.state?.from, minutes: Math.round(((lockout.state?.until ?? 0) - Date.now()) / 60_000) };
+    await wait(1500);
+    await shot(windows.overlay, 'E2E-host-bombed');
+    await nav('friends');
+    await shot(windows.main, 'E2E-host-friends');
+    result.feed = view().feed.map((f) => f.text);
+    mark('result', result);
+    await until('the guest finished', () => marked('guest', 'result'), 60_000);
+    return true;
+  }
+
+  // Guest
+  await todos.add('Fix the login bug');
+  await until('the crew code', () => existsSync(join(dir, 'code.txt')), 60_000);
+  const joined = crew.join(readFileSync(join(dir, 'code.txt'), 'utf8').trim(), 'Sam');
+  if (!(joined as { ok?: boolean }).ok) throw new Error(`could not join: ${JSON.stringify(joined)}`);
+  await until('connected and sees Grace', () => view().connected && other()?.name === 'Grace');
+  await until('Grace shows as locked in', () => other()?.state === 'locked');
+  const hostLockedAt = JSON.parse(readFileSync(join(dir, 'host-locked.json'), 'utf8')).at as number;
+  // Locked in: no bombing her.
+  const blocked = await crew.throwBomb(other()!.id, 'Back to work.');
+  result.whileLocked = blocked;
+  // Her minutes as I see them, after she has been locked in a while.
+  await wait(Math.max(0, hostLockedAt + 70_000 - Date.now()));
+  result.seenWhileLocked = { lockedToday: other()?.lockedToday, secondsLocked: Math.round((Date.now() - hostLockedAt) / 1000), stats: other()?.stats };
+  await nav('friends');
+  await wait(600);
+  await shot(windows.main, 'E2E-guest-friends');
+  await windows.main?.webContents.executeJavaScript(`[...document.querySelectorAll('button')].find((b) => b.textContent.includes('numbers'))?.click()`).catch(() => undefined);
+  await wait(600);
+  await shot(windows.main, 'E2E-guest-today');
+  mark('blocked', result.whileLocked);
+  await until('Grace stopped her session', () => other()?.state !== 'locked' && other()?.state !== 'break', 120_000);
+  const thrown = await crew.throwBomb(other()!.id, 'The investor update is not going to send itself.');
+  result.thrown = thrown;
+  say(`threw a bomb at Grace (${other()?.state}): ${JSON.stringify(thrown)}`);
+  if (!thrown.ok) throw new Error(`the bomb didn't go: ${thrown.error}`);
+  result.bombsLeft = view().bombsLeft;
+  await until('Grace says the bomb hit', () => crew.events().some((e) => e.type === 'thrown' && e.outcome === 'hit'), 60_000);
+  result.outcome = crew.events().filter((e) => e.type === 'thrown').map((e) => e.outcome);
+  await wait(2000);
+  result.feed = view().feed.map((f) => f.text);
+  result.seenAfter = { lockedToday: other()?.lockedToday, state: other()?.state };
+  mark('result', result);
+  return true;
+}
+
+/**
  * LOCKIN_SHEET_FILE=<an .xlsx> (with LOCKIN_SMOKE and LOCKIN_SHOTS): the Lock In list kept in a
  * spreadsheet, from the invitation to a connected sheet, and a crew sharing to-dos.
  */
@@ -4393,7 +4512,7 @@ async function sheetShots(
   await js(`document.querySelector('.list-sheet')?.scrollIntoView({ block: 'start' })`);
   await wait(300);
   await shot(w, 'S2-preview');
-  await click('Add the Lock In tab');
+  await click('Add my tab');
   await wait(2500);
   await js(`document.getElementById('view').scrollTop = 0`);
   await todos.add('Book flights home');
@@ -4457,6 +4576,14 @@ async function smokeTest(): Promise<void> {
   if (process.env.LOCKIN_LOOK) {
     await lookShots(wait, shot, nav);
     app.exit(0);
+    return;
+  }
+  if (process.env.LOCKIN_CREW_E2E) {
+    const ok = await crewE2E(process.env.LOCKIN_CREW_E2E === 'host' ? 'host' : 'guest', wait, shot, nav).catch((e: Error) => {
+      console.log(`E2E FAILED: ${e.message}`);
+      return false;
+    });
+    app.exit(ok && !errors.length ? 0 : 1);
     return;
   }
   if (process.env.LOCKIN_SHEET_FILE) {

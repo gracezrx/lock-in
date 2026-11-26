@@ -147,7 +147,7 @@ No roasts during a focus session, a call, a mute, or the 10 minutes after a sess
 
 The Lock In list and a spreadsheet are one thing. On the To-dos page, pick *Lock In list*, then *Keep this list in a spreadsheet too*: paste a Google Sheets link, choose an Excel, Numbers or CSV file, or *Make a new one* (an Excel file that opens in Excel, Numbers or Google Sheets).
 
-**Lock In's own tab.** By default Lock In adds a tab called *Lock In* to your spreadsheet, with your open to-dos already in it, and leaves your other tabs alone. You see the tab before it's made. It has the same columns everywhere:
+**Your own tab.** By default Lock In adds a tab named for you, like *Lock In · Grace*, to your spreadsheet, with your open to-dos already in it, and leaves your other tabs alone. You see the tab before it's made. It has the same columns everywhere:
 
 | Done | Task | Due | Priority | Project | Notes | Added |
 | --- | --- | --- | --- | --- | --- | --- |
@@ -156,9 +156,11 @@ The Lock In list and a spreadsheet are one thing. On the To-dos page, pick *Lock
 
 Done is a checkbox (Google Sheets, Numbers) or a *Done* dropdown (Excel); finished rows turn grey and get struck through. Priority is a High/Medium/Low dropdown.
 
-**Both ways.** A to-do you add in Lock In (typed, from your phone, or said to the coach) is written into the sheet, and so is a tick. A row you add in the sheet shows up in Lock In within two minutes, and a tick there counts as done. When the sheet can't be written right now (the file is open in Excel, or it's a read-only Google link), Lock In keeps your new to-dos and ticks, marks them *not in the sheet yet*, and writes them as soon as it can. Before Lock In first changes a file, it keeps a copy in its own folder (the last ten).
+**Both ways.** A to-do you add in Lock In (typed, from your phone, or said to the coach) is written into the sheet, and so is a tick. Something you tell the coach you did that wasn't on the list goes in as a ticked row. A row you add in the sheet shows up in Lock In within two minutes, and a tick there counts as done. When the sheet can't be written right now (the file is open in Excel, or it's a read-only Google link), Lock In keeps your new to-dos and ticks, marks them *not in the sheet yet*, and writes them as soon as it can. Before Lock In first changes a file, it keeps a copy in its own folder (the last ten).
 
 **Stop using it** brings the tab's open to-dos back into the Lock In list; the tab stays in your sheet as it is.
+
+**A team in one Google Sheet.** One person sets up the private connector (below) and presses *Copy link for your team* on the To-dos page. Everyone else pastes that link in their Lock In (To-dos → Lock In list → Keep this list in a spreadsheet too → Google Sheets) and picks *Your own tab*. Each person gets a tab of their own in the same sheet, so everyone can see everyone's list. The link carries the connector's secret: share it only with your team.
 
 **Or one of your tabs.** Pick any tab of yours instead and Lock In reads it as your list. Lock In finds the task, done, due-date, priority and assigned-to columns on its own (checkboxes, TRUE/FALSE, "Done", "Completed", "x" and ✓ all count as done) and shows what it found. Any column can be changed by hand. New to-dos go under your last task, and ticks copy what your sheet already uses ("x", "Done", a checkbox).
 

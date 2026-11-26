@@ -10,9 +10,13 @@ Optional: **[Lock-In-Extended.zip](https://github.com/gracezrx/lock-in/releases/
 3. Setup takes a few minutes and walks you through everything: your goals, today's to-dos, what distracts you, your coach (and its Claude and ElevenLabs keys, with where to get them), whether to share usage data, then the menu bar padlock, Accessibility, the microphone, the Chrome extension and your calendar.
 
 ### In this version
-- **One to-do list, in a spreadsheet too.** The Lock In list can live in a tab of your Google Sheet, Excel, Numbers or CSV file. Lock In adds a "Lock In" tab (Done, Task, Due, Priority, Project, Notes, Added) with your open to-dos in it, and shows it to you before it's made. What you add or tick in Lock In is written into the sheet; rows you add there show up in Lock In. Or point it at a tab you already have. If the file is open in Excel, Lock In holds your changes and writes them once you close it. *Using the Google connector from before? Paste the new script over the old one and deploy a new version (the setup screen shows how).*
-- **Today's numbers for your crew.** A second view on the Friends page: everyone's minutes locked in today (the session going on now included), to-dos done and still to go, and crew totals.
-- **Share my to-dos** (crew settings, off by default): your crew sees your open to-dos and what you finished today, and the feed says when someone finishes something.
-- **Clearer voice errors.** When a call can't connect because your ElevenLabs credits are used up, Lock In says so and when they come back, instead of "the AI agent is not available".
+- **A team in one Google Sheet.** Everyone gets their own tab (*Lock In · Grace*, *Lock In · Sam*), so nobody writes into anyone else's list. One person sets up the Google connector and presses *Copy link for your team*; everyone else pastes that link.
+- **Everything you did lands in the sheet.** Things you tell the coach you finished that weren't on the list go in as ticked rows. Picking a spreadsheet during setup now starts with your own tab, and the to-dos you type during setup go into it.
+- **Locked-in minutes are right.** A session going on was counted twice on the Friends page; now it's counted once, live. While you're locked in your minutes reach your crew every 3 minutes (it was 10).
+- Tested end to end: two copies of Lock In in one crew, bombs refused while someone's locked in and landing once they stop, the 5-minute lockout, and the Google connector script itself.
+
+From 0.5.0: the Lock In list in a spreadsheet tab (Google Sheets, Excel, Numbers, CSV), *Today's numbers* and *Share my to-dos* for crews, and clearer voice errors when your ElevenLabs credits run out.
+
+*Using the Google connector from before? Paste the new script over the old one and deploy a new version (the setup screen shows how).*
 
 Intel Mac? Build it from source (see the README).
