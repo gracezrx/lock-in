@@ -10,8 +10,9 @@ Optional: **[Lock-In-Extended.zip](https://github.com/gracezrx/lock-in/releases/
 3. Setup takes a few minutes and walks you through everything: your goals, today's to-dos, what distracts you, your coach (and its Claude and ElevenLabs keys, with where to get them), whether to share usage data, then the menu bar padlock, Accessibility, the microphone, the Chrome extension and your calendar.
 
 ### In this version
-- Setup covers the whole thing now: picking your coach, adding the two API keys (with links and what each one does), the microphone for talking back, and the Chrome extension.
-- Lock In Extended, the Chrome extension, is its own download instead of a folder inside the app.
-- Optional, anonymous usage data (Settings → Usage data): which features you use, and, only if you say yes, time per app and site. Never window titles, page addresses, what you type or what the coach says. You can see exactly what's sent, and delete it.
+- **One to-do list, in a spreadsheet too.** The Lock In list can live in a tab of your Google Sheet, Excel, Numbers or CSV file. Lock In adds a "Lock In" tab (Done, Task, Due, Priority, Project, Notes, Added) with your open to-dos in it, and shows it to you before it's made. What you add or tick in Lock In is written into the sheet; rows you add there show up in Lock In. Or point it at a tab you already have. If the file is open in Excel, Lock In holds your changes and writes them once you close it. *Using the Google connector from before? Paste the new script over the old one and deploy a new version (the setup screen shows how).*
+- **Today's numbers for your crew.** A second view on the Friends page: everyone's minutes locked in today (the session going on now included), to-dos done and still to go, and crew totals.
+- **Share my to-dos** (crew settings, off by default): your crew sees your open to-dos and what you finished today, and the feed says when someone finishes something.
+- **Clearer voice errors.** When a call can't connect because your ElevenLabs credits are used up, Lock In says so and when they come back, instead of "the AI agent is not available".
 
 Intel Mac? Build it from source (see the README).

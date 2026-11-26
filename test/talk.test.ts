@@ -245,3 +245,20 @@ test('builds the done log, daily summary, sessions and day files', () => {
   assert.deepEqual(day.map((r) => r.split(',')[1]), ['Type', 'Meeting', 'Done', 'Focus session', 'Done']);
   assert.ok(byName[join('Days', '2026-10-23.csv')], 'yesterday has its own file too');
 });
+
+test('a call that won’t connect: out of credits says so (and when they come back), a missing agent gets replaced', async () => {
+  let sub: Record<string, unknown> = { character_count: 10_000, character_limit: 10_000, next_character_count_reset_unix: Date.UTC(2026, 11, 3, 12) / 1000 };
+  const http = (async (url: string | URL | Request) => {
+    if (String(url).endsWith('/v1/user/subscription')) return Response.json(sub);
+    return new Response('{}', { status: 404 });
+  }) as typeof fetch;
+  let saved: unknown = { agentId: 'agent_1', toolIds: [], hash: 'x' };
+  const a = new ElevenAgent({ key: () => 'k', voiceId: () => 'v', load: () => saved as never, save: (r) => (saved = r), http, log: () => undefined });
+  const NOT_AVAILABLE = 'The AI agent you are trying to reach is not available.';
+  assert.match((await a.whyNoVoice(NOT_AVAILABLE)) ?? '', /credits are used up until Dec 3/);
+  assert.ok(saved, 'out of credits: the agent is fine, keep it');
+  sub = { character_count: 1200, character_limit: 10_000 };
+  assert.match((await a.whyNoVoice(NOT_AVAILABLE)) ?? '', /set up a fresh one/);
+  assert.equal(saved, null, 'the next call makes a new agent');
+  assert.equal(await a.whyNoVoice('Could not start audio'), null, 'other errors keep their own message');
+});

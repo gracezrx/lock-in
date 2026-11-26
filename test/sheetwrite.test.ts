@@ -70,7 +70,7 @@ test('the Google connector script is valid JavaScript with your secret in it', (
 function provider(cfg: SheetSettings, seed: { title: string }[] = []) {
   let state: TrackState | null = null;
   const backups: string[] = [];
-  const p = new SheetProvider({ cfg: () => cfg, loadState: () => state, saveState: (s) => (state = structuredClone(s)), seed: () => seed, backup: (path) => backups.push(path) });
+  const p = new SheetProvider({ cfg: () => cfg, loadState: () => state, saveState: (s) => (state = structuredClone(s)), seed: () => seed, backup: (path) => backups.push(path), clock: () => NOW });
   return { p, state: () => state, backups };
 }
 
@@ -177,7 +177,7 @@ test('a shared Google link: new to-dos stay in Lock In until the sheet has them'
   let body = 'Task,Done\nDeck,FALSE\n';
   const http = (async () => new Response(body, { status: 200, headers: { 'content-type': 'text/csv' } })) as typeof fetch;
   let state: TrackState | null = null;
-  const p = new SheetProvider({ cfg: () => ({ ...DEFAULT_TODO.sheet, url: 'https://docs.google.com/spreadsheets/d/1AbCdEfGhIjKlMnOpQrStUvWxYz012345/edit' }), http, loadState: () => state, saveState: (s) => (state = s) });
+  const p = new SheetProvider({ cfg: () => ({ ...DEFAULT_TODO.sheet, url: 'https://docs.google.com/spreadsheets/d/1AbCdEfGhIjKlMnOpQrStUvWxYz012345/edit' }), http, loadState: () => state, saveState: (s) => (state = s), clock: () => NOW });
   await p.fetch(NOW);
   assert.equal(p.canAdd, true);
   assert.equal(p.addsToSheet, false);
@@ -224,7 +224,7 @@ test('Google connector: adds the Lock In tab with your to-dos, then adds rows to
   }) as typeof fetch;
   const cfg: SheetSettings = { ...DEFAULT_TODO.sheet, url: 'https://script.google.com/macros/s/AKfy/exec', token: 't', own: true };
   let state: TrackState | null = null;
-  const p = new SheetProvider({ cfg: () => cfg, http, loadState: () => state, saveState: (s) => (state = s), seed: () => [{ title: 'Deck' }] });
+  const p = new SheetProvider({ cfg: () => cfg, http, loadState: () => state, saveState: (s) => (state = s), seed: () => [{ title: 'Deck' }], clock: () => NOW });
   const pv = await p.preview();
   assert.equal(pv.willCreate, true);
   assert.deepEqual(pv.tabs, ['Sheet1']);

@@ -157,6 +157,43 @@ export class ElevenAgent {
     }
   }
 
+  /** This month's ElevenLabs allowance (null when the key isn't allowed to see it). */
+  async credits(): Promise<{ used: number; limit: number; resetsAt?: number } | null> {
+    try {
+      const r = await this.call('GET', '/v1/user/subscription');
+      if (!r.ok) return null;
+      const used = Number(r.json.character_count);
+      const limit = Number(r.json.character_limit);
+      if (!Number.isFinite(used) || !Number.isFinite(limit)) return null;
+      const reset = Number(r.json.next_character_count_reset_unix);
+      return { used, limit, resetsAt: Number.isFinite(reset) && reset > 0 ? reset * 1000 : undefined };
+    } catch {
+      return null;
+    }
+  }
+
+  /** Forgets the saved agent, so the next call sets up a fresh one. */
+  forget(): void {
+    this.d.save(null);
+  }
+
+  /**
+   * Why a call didn't connect, in plain words. ElevenLabs says "The AI agent you are trying to
+   * reach is not available" both when the month's credits are used up and when the agent is
+   * gone (another copy of Lock In replaced it): check which.
+   */
+  async whyNoVoice(message: string): Promise<string | null> {
+    if (!/not available|quota|credit/i.test(message)) return null;
+    const c = await this.credits();
+    if (c && c.limit > 0 && c.used >= c.limit * 0.98) {
+      const when = c.resetsAt ? new Date(c.resetsAt).toLocaleDateString(undefined, { month: 'short', day: 'numeric' }) : '';
+      return `Your ElevenLabs credits are used up${when ? ` until ${when}` : ' for this month'}, and talking out loud needs them. Typing works. You can add more at elevenlabs.io, under Subscription.`;
+    }
+    if (/quota|credit/i.test(message)) return 'Your ElevenLabs account is out of credits for now. Typing works.';
+    this.forget();
+    return 'ElevenLabs couldn’t reach your voice agent, so Lock In will set up a fresh one. Try talking again in a moment; you can type meanwhile.';
+  }
+
   /** A one-time URL the talk window connects to (valid 15 minutes). */
   async signedUrl(retry = true): Promise<string> {
     const agentId = await this.ensure();

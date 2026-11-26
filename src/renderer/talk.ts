@@ -142,7 +142,11 @@ async function startVoice(p: TalkStart): Promise<void> {
       },
       onDisconnect: (d) => {
         if (finished) return;
-        void finish(d.reason === 'error' ? `Disconnected: ${d.message}` : undefined);
+        if (d.reason !== 'error') return void finish();
+        void (async () => {
+          const why = await api.invoke<string | null>('talk:voiceFailed', d.message).catch(() => null);
+          void finish(why ?? `Disconnected: ${d.message}`);
+        })();
       },
       onError: (message) => notice(String(message)),
     });
@@ -151,7 +155,8 @@ async function startVoice(p: TalkStart): Promise<void> {
   } catch (e) {
     const msg = (e as Error)?.message ?? String(e);
     const mic = /permission|notallowed|denied|microphone/i.test(msg);
-    notice(mic ? 'Lock In cannot use the microphone. Allow it in System Settings, Privacy and Security, Microphone. You can type meanwhile.' : `Voice did not connect (${msg}). You can type instead.`);
+    const why = mic ? null : await api.invoke<string | null>('talk:voiceFailed', msg).catch(() => null);
+    notice(mic ? 'Lock In cannot use the microphone. Allow it in System Settings, Privacy and Security, Microphone. You can type meanwhile.' : why ?? `Voice did not connect (${msg}). You can type instead.`);
     startText(p, false);
   }
 }

@@ -12,7 +12,7 @@ const INVOKE = new Set([
   'routines:get', 'routines:save', 'routines:test', 'notify:test', 'sound:test',
   'quiz:apps', 'todos:sheetPreview', 'todos:pickSheetFile', 'todos:connectorScript', 'clipboard:write', 'todos:undo',
   'todos:hide', 'todos:unhide', 'todos:sheetConnect', 'todos:sheetDisconnect', 'todos:newSheetFile', 'todos:openSheet', 'app:loginItem',
-  'talk:open', 'talk:tool', 'talk:text', 'talk:closed', 'talk:transcript', 'talk:status',
+  'talk:open', 'talk:tool', 'talk:text', 'talk:closed', 'talk:transcript', 'talk:status', 'talk:voiceFailed',
   'deadlines:get', 'deadlines:add', 'deadlines:update', 'deadlines:done', 'deadlines:remove', 'deadlines:fromTask', 'week:get', 'voices:list', 'voices:search', 'voices:preview', 'voices:stop', 'voices:use', 'calendar:mac', 'intro:claim', 'crew:get', 'crew:create', 'crew:join', 'crew:leave', 'crew:bomb', 'crew:settings', 'data:where', 'data:openFolder', 'data:restore',
   'calendar:get', 'calendar:test', 'calendar:refresh', 'export:now', 'export:open', 'export:chooseFolder', 'export:status',
   'coaches:list', 'coaches:get', 'coaches:create', 'coaches:update', 'coaches:remove', 'coaches:addFiles', 'coaches:addText', 'coaches:removeSource',

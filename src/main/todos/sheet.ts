@@ -949,6 +949,8 @@ export interface SheetDeps {
   seed?: () => TemplateRow[];
   /** Called before Lock In first changes a file, so a copy can be kept. */
   backup?: (path: string) => void;
+  /** The time (tests set it). */
+  clock?: () => number;
 }
 
 /** What one read of the sheet produced. */
@@ -1044,6 +1046,10 @@ export class SheetProvider implements TodoProvider {
   /** New to-dos land in the sheet itself (not only in Lock In). */
   get addsToSheet(): boolean {
     return canWrite(this.mode);
+  }
+
+  private now(): number {
+    return this.d.clock?.() ?? Date.now();
   }
 
   private stateNow(now: number): TrackState {
@@ -1404,7 +1410,7 @@ export class SheetProvider implements TodoProvider {
 
   /** Un-tick something that was ticked in Lock In only. */
   async undo(id: string): Promise<boolean> {
-    const st = this.stateNow(Date.now());
+    const st = this.stateNow(this.now());
     const p = st.pending?.find((x) => x.id === id);
     if (p) {
       if (p.flushed) return false;
@@ -1419,7 +1425,7 @@ export class SheetProvider implements TodoProvider {
   }
 
   async complete(id: string): Promise<boolean> {
-    const now = Date.now();
+    const now = this.now();
     const st = this.stateNow(now);
     const p = st.pending?.find((x) => x.id === id);
     if (p) {
@@ -1449,7 +1455,7 @@ export class SheetProvider implements TodoProvider {
   async add(title: string): Promise<boolean> {
     const t = title.trim();
     if (!t) return false;
-    const now = Date.now();
+    const now = this.now();
     const st = this.stateNow(now);
     const seen = this.rows.filter((r) => norm(r.title) === norm(t)).length;
     st.pending = [...(st.pending ?? []), { id: `new:${randomUUID()}`, title: t, at: now, seen }];
@@ -1459,7 +1465,7 @@ export class SheetProvider implements TodoProvider {
 
   /** Drops a to-do that was added in Lock In and isn't in the sheet yet. */
   async remove(id: string): Promise<boolean> {
-    const st = this.stateNow(Date.now());
+    const st = this.stateNow(this.now());
     const before = st.pending?.length ?? 0;
     st.pending = (st.pending ?? []).filter((p) => p.id !== id || p.flushed);
     if (st.pending.length === before) return false;

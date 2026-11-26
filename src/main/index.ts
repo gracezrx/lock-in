@@ -2645,6 +2645,7 @@ function setupIpc(): void {
   });
   handle('talk:transcript', (_e, role: string, text: string) => talk.transcript(role === 'user' ? 'user' : 'agent', String(text).slice(0, 2000)));
   handle('talk:status', () => ({ voice: talk.voiceReady, error: talkError, holdSpace: holdSpace.status }));
+  handle('talk:voiceFailed', (_e, message: string) => agent.whyNoVoice(String(message ?? '').slice(0, 500)));
   handle('calendar:get', () => ({ events: calendar.upcoming(), summary: calendar.summary(), agenda: calendar.agenda(), lastFetch: calendar.lastFetch }));
   handle('calendar:test', async (_e, url: string) => {
     try {
